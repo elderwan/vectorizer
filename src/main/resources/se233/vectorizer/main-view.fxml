@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.layout.BorderPane?>
+<?import se233.vectorizer.view.MainView?>
+
+<BorderPane xmlns="http://javafx.com/javafx/26"
+            xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="se233.vectorizer.controller.MainViewController">
+    <center>
+        <MainView fx:id="mainView"/>
+    </center>
+</BorderPane>
