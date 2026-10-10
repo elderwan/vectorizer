@@ -5,7 +5,10 @@ import org.apache.logging.log4j.Logger;
 import se233.vectorizer.model.ConversionSettings;
 import se233.vectorizer.model.ImageItem;
 import se233.vectorizer.model.VectorizationService;
+import se233.vectorizer.util.ColorAnalyzer;
 
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -51,6 +54,22 @@ public class BatchProcessor {
         List<ImageItem> snapshot = List.copyOf(items);
         return CompletableFuture.supplyAsync(() ->
                 process(snapshot, settings, outputDirectory, progressListener));
+    }
+
+    /**
+     * Detects colors and creates the initial preview for every imported image.
+     * Multiple images are processed concurrently.
+     *
+     * @param items images to preprocess
+     * @param progressListener receives completed count and total count
+     * @return future containing preview paths, detected colors, and failures
+     */
+    public CompletableFuture<PreprocessResult> preprocessAsync(
+            List<ImageItem> items,
+            Consumer<BatchProgress> progressListener) {
+        List<ImageItem> snapshot = List.copyOf(items);
+        return CompletableFuture.supplyAsync(() ->
+                preprocess(snapshot, progressListener));
     }
 
     public static boolean shouldProcessInParallel(List<ImageItem> items, ConversionSettings settings) {
@@ -110,6 +129,69 @@ public class BatchProcessor {
         return new BatchResult(successes, failures, parallel);
     }
 
+    private PreprocessResult preprocess(
+            List<ImageItem> items,
+            Consumer<BatchProgress> progressListener) {
+        LOGGER.info("Preprocessing batch size: {}", items.size());
+        List<PreprocessedItem> successes = new ArrayList<>();
+        List<BatchFailure> failures = new ArrayList<>();
+        if (items.isEmpty()) {
+            return new PreprocessResult(successes, failures, false);
+        }
+
+        ExecutorService executor = Executors.newFixedThreadPool(
+                Math.min(Runtime.getRuntime().availableProcessors(), items.size()));
+        try {
+            CompletionService<PreprocessedItem> completionService =
+                    new ExecutorCompletionService<>(executor);
+            for (ImageItem item : items) {
+                completionService.submit(() -> {
+                    BufferedImage image = ImageIO.read(item.getFile());
+                    if (image == null) {
+                        throw new IOException("Input image is corrupted: "
+                                + item.getFile().getName());
+                    }
+                    int colorCount = ColorAnalyzer.detectColorCount(image);
+                    Path svg = vectorizationService
+                            .convertAsync(item, item.getSettings()).join();
+                    return new PreprocessedItem(item, svg, colorCount);
+                });
+            }
+            for (int completed = 1; completed <= items.size(); completed++) {
+                try {
+                    successes.add(completionService.take().get());
+                } catch (Exception exception) {
+                    Throwable cause = unwrap(exception);
+                    LOGGER.error("Preprocessing item failed", cause);
+                    failures.add(new BatchFailure(cause.getMessage(), cause));
+                }
+                notifyProgress(progressListener, completed, items.size());
+            }
+        } finally {
+            executor.shutdownNow();
+        }
+        return new PreprocessResult(successes, failures, items.size() > 1);
+    }
+
+    private static void notifyProgress(
+            Consumer<BatchProgress> progressListener,
+            int completed,
+            int total) {
+        if (progressListener != null) {
+            progressListener.accept(new BatchProgress(completed, total));
+        }
+    }
+
+    private static Throwable unwrap(Throwable exception) {
+        Throwable cause = exception;
+        while ((cause instanceof CompletionException
+                || cause instanceof java.util.concurrent.ExecutionException)
+                && cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+        return cause;
+    }
+
     private static String stripExtension(String name) {
         int extensionIndex = name.lastIndexOf('.');
         return extensionIndex > 0 ? name.substring(0, extensionIndex) : name;
@@ -123,6 +205,19 @@ public class BatchProcessor {
 
     public record BatchResult(List<Path> successes, List<BatchFailure> failures, boolean parallel) {
         public BatchResult {
+            successes = List.copyOf(successes);
+            failures = List.copyOf(failures);
+        }
+    }
+
+    public record PreprocessedItem(ImageItem item, Path svg, int detectedColors) {
+    }
+
+    public record PreprocessResult(
+            List<PreprocessedItem> successes,
+            List<BatchFailure> failures,
+            boolean parallel) {
+        public PreprocessResult {
             successes = List.copyOf(successes);
             failures = List.copyOf(failures);
         }

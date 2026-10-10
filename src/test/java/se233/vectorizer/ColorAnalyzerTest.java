@@ -20,13 +20,13 @@ public class ColorAnalyzerTest {
     }
 
     @Test
-    void detectsSixColorsWithoutCapping() {
-        assertEquals(6, ColorAnalyzer.detectColorCount(imageWithColors(6)));
+    void detectsSixColorsAndCapsAtFive() {
+        assertEquals(5, ColorAnalyzer.detectColorCount(imageWithColors(6)));
     }
 
     @Test
-    void detectsTenColorsAndCapsAtEight() {
-        assertEquals(8, ColorAnalyzer.detectColorCount(imageWithColors(10)));
+    void detectsTenColorsAndCapsAtFive() {
+        assertEquals(5, ColorAnalyzer.detectColorCount(imageWithColors(10)));
     }
 
     private static BufferedImage imageWithColors(int colorCount) {

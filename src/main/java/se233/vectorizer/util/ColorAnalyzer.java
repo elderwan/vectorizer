@@ -20,7 +20,7 @@ public final class ColorAnalyzer {
      * Large images are sampled to keep analysis responsive.
      *
      * @param image image to inspect
-     * @return detected color count, capped at the supported maximum
+     * @return detected color count, capped at the supported custom maximum
      */
     public static int detectColorCount(BufferedImage image) {
         if (image == null) {

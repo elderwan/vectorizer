@@ -6,11 +6,13 @@ one ZIP archive containing supported images. Multiple medium-detail custom-color
 conversions are processed in parallel.
 
 In Custom color mode, the application reduces the image to the selected number
-of colors (up to eight). Each color is traced as a separate Potrace layer and
+of colors (up to five). Each color is traced as a separate Potrace layer and
 the layers are combined into one SVG. Potrace itself traces one monochrome
 layer at a time; the application performs the color separation and composition.
-Two to four colors are recommended for fast previews. Five to eight colors
-preserve more detail but require more Potrace layer conversions.
+Two to four colors are recommended for fast previews. Five colors preserve more
+detail but require more Potrace layer conversions. Unlimited mode keeps the
+original palette for small palettes and uses a bounded color palette for large
+photographs to keep processing responsive.
 
 ## Requirements
 

@@ -90,10 +90,10 @@ public class MainViewController {
             imageItems.clear();
             imageItems.addAll(loadedItems);
             currentIndex = 0;
+            prepareInitialSettings();
             mainView.showEditor();
             refreshPreview();
-            analyzeCurrentImage();
-            schedulePreviewConversion();
+            startInitialPreprocessing();
         } catch (IOException | RuntimeException exception) {
             LOGGER.error("Unable to load selected files", exception);
             showError(userMessage(exception, "The selected files could not be loaded."));
@@ -224,6 +224,46 @@ public class MainViewController {
         previewExecutor.submit(task);
     }
 
+    private void startInitialPreprocessing() {
+        mainView.setProcessingVisible(true);
+        mainView.getProgressBar().setProgress(0);
+        mainView.getStatusLabel().setText("Preparing previews...");
+        mainView.getPreviewPane().setBusy(true);
+
+        batchProcessor.preprocessAsync(imageItems, progress ->
+                Platform.runLater(() -> {
+                    mainView.getProgressBar().setProgress(
+                            (double) progress.completed() / progress.total());
+                    mainView.getStatusLabel().setText(
+                            "Preparing " + progress.completed() + "/" + progress.total());
+                })).whenComplete((result, throwable) -> Platform.runLater(() -> {
+            mainView.setProcessingVisible(false);
+            mainView.getPreviewPane().setBusy(false);
+            if (throwable != null) {
+                LOGGER.error("Initial preprocessing failed", unwrap(throwable));
+                showError(userMessage(unwrap(throwable),
+                        "The images could not be prepared."));
+                return;
+            }
+            for (BatchProcessor.PreprocessedItem item : result.successes()) {
+                item.item().setVectorizedPath(item.svg());
+            }
+            refreshPreview();
+            BatchProcessor.PreprocessedItem current = result.successes().stream()
+                    .filter(item -> item.item() == imageItems.get(currentIndex))
+                    .findFirst()
+                    .orElse(null);
+            if (current != null) {
+                mainView.getConfigPane().setColorLimit(current.detectedColors());
+            }
+            if (!result.failures().isEmpty()) {
+                LOGGER.error("Some initial previews failed: {}", result.failures().size());
+                showError(result.failures().size()
+                        + " image(s) could not be prepared.");
+            }
+        }));
+    }
+
     private void analyzeCurrentImage() {
         if (imageItems.isEmpty()) {
             return;
@@ -248,6 +288,16 @@ public class MainViewController {
             LOGGER.error("Unable to analyze image colors", unwrap(throwable));
             return null;
         });
+    }
+
+    private void prepareInitialSettings() {
+        for (ImageItem item : imageItems) {
+            ConversionSettings settings = item.getSettings();
+            settings.setDetailLevel(ConversionSettings.DetailLevel.MEDIUM);
+            settings.setColorMode(ConversionSettings.ColorMode.CUSTOM);
+            settings.setCustomColors(2);
+            settings.setRemoveBackground(false);
+        }
     }
 
     private void refreshPreview() {

@@ -5,6 +5,7 @@ import se233.vectorizer.model.ConversionSettings;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class ConversionSettingsTest {
     @Test
@@ -15,5 +16,13 @@ public class ConversionSettingsTest {
         assertEquals(ConversionSettings.ColorMode.CUSTOM, settings.getColorMode());
         assertEquals(2, settings.getCustomColors());
         assertFalse(settings.isRemoveBackground());
+    }
+
+    @Test
+    void customColorsAreLimitedToAssignmentMaximum() {
+        ConversionSettings settings = new ConversionSettings();
+
+        assertThrows(IllegalArgumentException.class,
+                () -> settings.setCustomColors(ConversionSettings.MAX_CUSTOM_COLORS + 1));
     }
 }

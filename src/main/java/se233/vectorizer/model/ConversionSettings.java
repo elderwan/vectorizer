@@ -2,7 +2,7 @@ package se233.vectorizer.model;
 
 public class ConversionSettings {
     public static final int MIN_CUSTOM_COLORS = 1;
-    public static final int MAX_CUSTOM_COLORS = 8;
+    public static final int MAX_CUSTOM_COLORS = 5;
 
     public enum DetailLevel {
         LOW("Low"),

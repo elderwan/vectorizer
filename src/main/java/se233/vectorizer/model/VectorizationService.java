@@ -28,6 +28,11 @@ public class VectorizationService {
     private static final String DEFAULT_EXECUTABLE = "potrace";
     private static final int MAX_SAMPLE_PIXELS = 100_000;
     private static final int K_MEANS_ITERATIONS = 8;
+    /*
+     * Unlimited keeps the original palette when it is small. A bounded palette
+     * is used for photographs so preview and export remain responsive.
+     */
+    private static final int MAX_UNLIMITED_COLORS = 16;
     private static volatile Boolean potraceAvailable;
 
     private final List<String> commandPrefix;
@@ -88,13 +93,12 @@ public class VectorizationService {
         Path directory = Files.createTempDirectory("vectorizer-potrace-");
         Path output = directory.resolve(stripExtension(item.getFile().getName()) + ".svg");
         try {
-            if (settings.getColorMode() == ConversionSettings.ColorMode.CUSTOM) {
-                convertCustomColors(image, settings, directory, output);
-            } else {
-                Path input = directory.resolve("input.ppm");
-                writePnm(image, input);
-                runPotrace(input, output, settings, "#000000");
-            }
+            int colorLimit = settings.getColorMode() == ConversionSettings.ColorMode.CUSTOM
+                    ? settings.getCustomColors() : MAX_UNLIMITED_COLORS;
+            boolean preservePalette =
+                    settings.getColorMode() == ConversionSettings.ColorMode.UNLIMITED;
+            convertColorLayers(image, settings, directory, output, colorLimit,
+                    preservePalette);
             LOGGER.info("Vectorization finished: {}", output);
             return output;
         } catch (CliToolNotFoundException | VectorizationException exception) {
@@ -114,17 +118,21 @@ public class VectorizationService {
         return image;
     }
 
-    private void convertCustomColors(
+    private void convertColorLayers(
             BufferedImage image,
             ConversionSettings settings,
             Path directory,
-            Path output) throws IOException {
-        QuantizedImage quantized = quantize(image, settings.getCustomColors());
+            Path output,
+            int colorLimit,
+            boolean preservePalette) throws IOException {
+        QuantizedImage quantized = quantize(image, colorLimit, preservePalette);
         List<Path> layerSvgs = new ArrayList<>();
         List<Integer> layerColors = new ArrayList<>();
+        int backgroundLayer = settings.isRemoveBackground()
+                ? detectBackgroundLayer(quantized) : -1;
 
         for (int layer = 0; layer < quantized.palette().size(); layer++) {
-            if (quantized.pixelCount(layer) == 0) {
+            if (quantized.pixelCount(layer) == 0 || layer == backgroundLayer) {
                 continue;
             }
             Path input = directory.resolve("layer-" + layer + ".ppm");
@@ -176,9 +184,10 @@ public class VectorizationService {
         }
     }
 
-    private static QuantizedImage quantize(BufferedImage image, int requestedColors) {
-        int colorCount = Math.max(1, Math.min(
-                ConversionSettings.MAX_CUSTOM_COLORS, requestedColors));
+    private static QuantizedImage quantize(
+            BufferedImage image,
+            int requestedColors,
+            boolean preservePalette) {
         int width = image.getWidth();
         int height = image.getHeight();
         int step = Math.max(1, (int) Math.ceil(
@@ -190,8 +199,13 @@ public class VectorizationService {
             }
         }
 
+        List<Integer> distinctSamples = new ArrayList<>(new LinkedHashSet<>(samples));
+        int colorCount = Math.max(1, Math.min(requestedColors, distinctSamples.size()));
+        boolean canUseOriginalPalette = preservePalette && distinctSamples.size() <= requestedColors;
         int[] palette = initialPalette(samples, colorCount);
-        for (int iteration = 0; iteration < K_MEANS_ITERATIONS; iteration++) {
+        for (int iteration = 0;
+             iteration < K_MEANS_ITERATIONS && !canUseOriginalPalette;
+             iteration++) {
             long[] red = new long[palette.length];
             long[] green = new long[palette.length];
             long[] blue = new long[palette.length];
@@ -331,6 +345,21 @@ public class VectorizationService {
         }
         svg.append("</svg>");
         Files.writeString(output, svg, StandardCharsets.UTF_8);
+    }
+
+    private static int detectBackgroundLayer(QuantizedImage image) {
+        if (image.palette().size() == 1) {
+            return -1;
+        }
+        int topLeft = image.assignments()[0];
+        int topRight = image.assignments()[image.width() - 1];
+        int bottomLeft = image.assignments()[(image.height() - 1) * image.width()];
+        int bottomRight = image.assignments()[image.assignments().length - 1];
+        if (topLeft != topRight || topLeft != bottomLeft || topLeft != bottomRight) {
+            return -1;
+        }
+        return image.pixelCount(topLeft) >= image.assignments().length / 20
+                ? topLeft : -1;
     }
 
     private static int turdSize(ConversionSettings settings) {
