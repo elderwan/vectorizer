@@ -18,6 +18,11 @@ public class Launcher extends Application {
             FXMLLoader loader = new FXMLLoader(
                     Launcher.class.getResource("/se233/vectorizer/main-view.fxml"));
             Scene scene = new Scene(loader.load(), 1280, 760);
+            scene.getRoot().getStyleClass().add("app-root");
+            String stylesheet = Launcher.class
+                    .getResource("/se233/vectorizer/app.css")
+                    .toExternalForm();
+            scene.getStylesheets().add(stylesheet);
 
             stage.setTitle("Vectorizer");
             stage.setMinWidth(960);

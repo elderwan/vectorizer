@@ -11,6 +11,7 @@ public final class AllEventHandlers {
         view.getConfigPane().setOnBack(controller::showPrevious);
         view.getConfigPane().setOnNext(controller::showNext);
         view.getConfigPane().setOnExportAll(controller::exportAll);
+        view.getConfigPane().setOnReset(controller::resetAll);
         view.getConfigPane().setOnSettingsChanged(controller::applySettings);
     }
 }

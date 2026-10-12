@@ -8,6 +8,7 @@ import javafx.scene.control.Label;
 import javafx.scene.control.RadioButton;
 import javafx.scene.control.Spinner;
 import javafx.scene.control.SpinnerValueFactory;
+import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
@@ -17,7 +18,10 @@ import java.util.function.Consumer;
 
 public class ConfigPane extends VBox {
     private final Button exportAllButton = new Button("Export All");
+    private final Button resetButton = new Button("Reset");
     private final ComboBox<ConversionSettings.DetailLevel> detailComboBox = new ComboBox<>();
+    private final ComboBox<ConversionSettings.NamingRule> namingRuleComboBox = new ComboBox<>();
+    private final TextField customNameField = new TextField();
     private final RadioButton unlimitedRadio = new RadioButton("Unlimited");
     private final RadioButton customRadio = new RadioButton("Custom");
     private final Spinner<Integer> colorsSpinner = new Spinner<>(
@@ -31,13 +35,25 @@ public class ConfigPane extends VBox {
     private boolean updating;
 
     public ConfigPane() {
+        getStyleClass().add("config-pane");
         setPadding(new Insets(16));
-        setSpacing(14);
+        setSpacing(12);
         setPrefWidth(240);
 
         detailComboBox.getItems().setAll(ConversionSettings.DetailLevel.values());
         detailComboBox.setValue(ConversionSettings.DetailLevel.MEDIUM);
         detailComboBox.setMaxWidth(Double.MAX_VALUE);
+
+        namingRuleComboBox.getItems().setAll(ConversionSettings.NamingRule.values());
+        namingRuleComboBox.setValue(ConversionSettings.NamingRule.ORIGINAL);
+        namingRuleComboBox.setMaxWidth(Double.MAX_VALUE);
+        customNameField.setPromptText("Enter custom prefix");
+        customNameField.setMaxWidth(Double.MAX_VALUE);
+        customNameField.getStyleClass().add("settings-control");
+        namingRuleComboBox.getStyleClass().add("settings-control");
+        namingRuleComboBox.valueProperty().addListener(
+                (observable, oldValue, newValue) -> updateCustomNameVisibility());
+        updateCustomNameVisibility();
 
         ToggleGroup colorGroup = new ToggleGroup();
         unlimitedRadio.setToggleGroup(colorGroup);
@@ -51,17 +67,28 @@ public class ConfigPane extends VBox {
             colorsSpinner.setDisable(!selected);
         });
 
+        exportAllButton.getStyleClass().add("primary-button");
+        resetButton.getStyleClass().add("secondary-button");
+        detailComboBox.getStyleClass().add("settings-control");
+        colorsSpinner.getStyleClass().add("settings-control");
+        removeBackgroundCheckBox.getStyleClass().add("settings-check");
+
+        VBox spacer = new VBox();
+        VBox.setVgrow(spacer, javafx.scene.layout.Priority.ALWAYS);
+
         getChildren().addAll(
                 exportAllButton,
-                new Label("Detail level"),
-                detailComboBox,
-                new Label("Colors"),
-                new HBox(10, unlimitedRadio, customRadio),
-                colorsSpinner,
-                removeBackgroundCheckBox,
-                new VBox(),
-                createNavigation());
-        VBox.setVgrow(getChildren().get(7), javafx.scene.layout.Priority.ALWAYS);
+                resetButton,
+                createSection("File naming", new VBox(8,
+                        namingRuleComboBox,
+                        customNameField)),
+                createSection("Detail", detailComboBox),
+                createSection("Colors", new VBox(8,
+                        new HBox(10, unlimitedRadio, customRadio),
+                        colorsSpinner)),
+                createSection("Background", removeBackgroundCheckBox),
+                spacer,
+                createSection("Navigation", createNavigation()));
     }
 
     public ConversionSettings readSettings() {
@@ -72,6 +99,8 @@ public class ConfigPane extends VBox {
                 : ConversionSettings.ColorMode.UNLIMITED);
         settings.setCustomColors(colorsSpinner.getValue());
         settings.setRemoveBackground(removeBackgroundCheckBox.isSelected());
+        settings.setNamingRule(namingRuleComboBox.getValue());
+        settings.setCustomName(customNameField.getText());
         return settings;
     }
 
@@ -84,6 +113,9 @@ public class ConfigPane extends VBox {
             colorsSpinner.getValueFactory().setValue(settings.getCustomColors());
             colorsSpinner.setDisable(settings.getColorMode() != ConversionSettings.ColorMode.CUSTOM);
             removeBackgroundCheckBox.setSelected(settings.isRemoveBackground());
+            namingRuleComboBox.setValue(settings.getNamingRule());
+            customNameField.setText(settings.getCustomName());
+            updateCustomNameVisibility();
         } finally {
             updating = false;
         }
@@ -91,6 +123,10 @@ public class ConfigPane extends VBox {
 
     public void setOnExportAll(Runnable action) {
         exportAllButton.setOnAction(event -> action.run());
+    }
+
+    public void setOnReset(Runnable action) {
+        resetButton.setOnAction(event -> action.run());
     }
 
     public void setOnBack(Runnable action) {
@@ -103,6 +139,10 @@ public class ConfigPane extends VBox {
 
     public void setOnSettingsChanged(Consumer<ConversionSettings> action) {
         detailComboBox.valueProperty().addListener((observable, oldValue, newValue) -> notifySettingsChanged(action));
+        namingRuleComboBox.valueProperty().addListener((observable, oldValue, newValue) ->
+                notifySettingsChanged(action));
+        customNameField.textProperty().addListener((observable, oldValue, newValue) ->
+                notifySettingsChanged(action));
         unlimitedRadio.selectedProperty().addListener((observable, oldValue, newValue) -> notifySettingsChanged(action));
         customRadio.selectedProperty().addListener((observable, oldValue, newValue) -> notifySettingsChanged(action));
         colorsSpinner.getValueFactory().valueProperty()
@@ -130,12 +170,30 @@ public class ConfigPane extends VBox {
         }
     }
 
+    private void updateCustomNameVisibility() {
+        boolean customNameRequired = namingRuleComboBox.getValue()
+                != ConversionSettings.NamingRule.ORIGINAL;
+        customNameField.setVisible(customNameRequired);
+        customNameField.setManaged(customNameRequired);
+    }
+
     private HBox createNavigation() {
         HBox navigation = new HBox(8, backButton, nextButton);
+        navigation.getStyleClass().add("navigation-box");
+        backButton.getStyleClass().add("secondary-button");
+        nextButton.getStyleClass().add("secondary-button");
         backButton.setMaxWidth(Double.MAX_VALUE);
         nextButton.setMaxWidth(Double.MAX_VALUE);
         HBox.setHgrow(backButton, javafx.scene.layout.Priority.ALWAYS);
         HBox.setHgrow(nextButton, javafx.scene.layout.Priority.ALWAYS);
         return navigation;
+    }
+
+    private static VBox createSection(String title, javafx.scene.Node content) {
+        Label titleLabel = new Label(title);
+        titleLabel.getStyleClass().add("section-title");
+        VBox section = new VBox(7, titleLabel, content);
+        section.getStyleClass().add("config-section");
+        return section;
     }
 }

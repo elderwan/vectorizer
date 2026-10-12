@@ -15,11 +15,14 @@ public class DropZonePane extends VBox {
 
     public DropZonePane(Consumer<List<File>> filesConsumer) {
         this.filesConsumer = filesConsumer;
+        getStyleClass().add("drop-zone");
         setAlignment(Pos.CENTER);
         setSpacing(12);
 
         Label icon = new Label("\u25a7");
+        icon.getStyleClass().add("drop-zone-icon");
         Label message = new Label("Drag file(s) here");
+        message.getStyleClass().add("drop-zone-message");
         getChildren().addAll(icon, message);
 
         setOnDragOver(event -> {

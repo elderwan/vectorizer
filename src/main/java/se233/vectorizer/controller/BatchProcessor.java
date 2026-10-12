@@ -67,9 +67,16 @@ public class BatchProcessor {
     public CompletableFuture<PreprocessResult> preprocessAsync(
             List<ImageItem> items,
             Consumer<BatchProgress> progressListener) {
+        return preprocessAsync(items, progressListener, null);
+    }
+
+    public CompletableFuture<PreprocessResult> preprocessAsync(
+            List<ImageItem> items,
+            Consumer<BatchProgress> progressListener,
+            Consumer<PreprocessedItem> itemListener) {
         List<ImageItem> snapshot = List.copyOf(items);
         return CompletableFuture.supplyAsync(() ->
-                preprocess(snapshot, progressListener));
+                preprocess(snapshot, progressListener, itemListener));
     }
 
     public static boolean shouldProcessInParallel(List<ImageItem> items, ConversionSettings settings) {
@@ -93,12 +100,14 @@ public class BatchProcessor {
                 : Executors.newSingleThreadExecutor();
         try {
             Files.createDirectories(outputDirectory);
+            List<String> outputNames = createOutputNames(items, settings);
             CompletionService<Path> completionService = new ExecutorCompletionService<>(executor);
-            for (ImageItem item : items) {
+            for (int index = 0; index < items.size(); index++) {
+                ImageItem item = items.get(index);
+                String outputName = outputNames.get(index);
                 Callable<Path> task = () -> {
                     Path temporarySvg = vectorizationService.convertAsync(item, settings).join();
-                    Path destination = outputDirectory.resolve(
-                            stripExtension(item.getFile().getName()) + ".svg");
+                    Path destination = outputDirectory.resolve(outputName);
                     Files.copy(temporarySvg, destination, StandardCopyOption.REPLACE_EXISTING);
                     return destination;
                 };
@@ -129,9 +138,56 @@ public class BatchProcessor {
         return new BatchResult(successes, failures, parallel);
     }
 
+    private static List<String> createOutputNames(
+            List<ImageItem> items,
+            ConversionSettings settings) {
+        ConversionSettings.NamingRule namingRule = settings.getNamingRule();
+        if (namingRule == ConversionSettings.NamingRule.ORIGINAL) {
+            return items.stream()
+                    .map(item -> stripExtension(item.getFile().getName()) + ".svg")
+                    .toList();
+        }
+
+        String customBase = sanitizeCustomName(settings.getCustomName());
+        List<String> names = new ArrayList<>(items.size());
+        for (int index = 0; index < items.size(); index++) {
+            names.add(customBase + "_" + (index + 1) + ".svg");
+        }
+        return names;
+    }
+
+    private static String sanitizeCustomName(String value) {
+        String name = value == null ? "" : value.trim();
+        if (name.regionMatches(true, Math.max(0, name.length() - 4), ".svg", 0, 4)) {
+            name = name.substring(0, name.length() - 4).trim();
+        }
+
+        StringBuilder sanitized = new StringBuilder(name.length());
+        for (int index = 0; index < name.length(); index++) {
+            char character = name.charAt(index);
+            if (Character.isISOControl(character)
+                    || "\\/:*?\"<>|".indexOf(character) >= 0) {
+                sanitized.append('_');
+            } else {
+                sanitized.append(character);
+            }
+        }
+
+        name = sanitized.toString().stripTrailing();
+        while (name.endsWith(".")) {
+            name = name.substring(0, name.length() - 1).stripTrailing();
+        }
+        if (name.isBlank() || name.equals(".") || name.equals("..")) {
+            throw new IllegalArgumentException(
+                    "Enter a valid custom export name before exporting.");
+        }
+        return name;
+    }
+
     private PreprocessResult preprocess(
             List<ImageItem> items,
-            Consumer<BatchProgress> progressListener) {
+            Consumer<BatchProgress> progressListener,
+            Consumer<PreprocessedItem> itemListener) {
         LOGGER.info("Preprocessing batch size: {}", items.size());
         List<PreprocessedItem> successes = new ArrayList<>();
         List<BatchFailure> failures = new ArrayList<>();
@@ -159,7 +215,11 @@ public class BatchProcessor {
             }
             for (int completed = 1; completed <= items.size(); completed++) {
                 try {
-                    successes.add(completionService.take().get());
+                    PreprocessedItem result = completionService.take().get();
+                    successes.add(result);
+                    if (itemListener != null) {
+                        itemListener.accept(result);
+                    }
                 } catch (Exception exception) {
                     Throwable cause = unwrap(exception);
                     LOGGER.error("Preprocessing item failed", cause);

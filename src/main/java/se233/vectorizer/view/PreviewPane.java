@@ -9,11 +9,21 @@ import javafx.scene.control.ScrollPane;
 import javafx.scene.control.SplitPane;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
+import javafx.scene.image.PixelWriter;
+import javafx.scene.image.WritableImage;
 import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.Background;
+import javafx.scene.layout.BackgroundImage;
+import javafx.scene.layout.BackgroundPosition;
+import javafx.scene.layout.BackgroundRepeat;
+import javafx.scene.layout.BackgroundSize;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.scene.paint.Color;
 import javafx.scene.web.WebView;
+import javafx.beans.property.DoubleProperty;
+import javafx.beans.property.SimpleDoubleProperty;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -31,20 +41,24 @@ public class PreviewPane extends BorderPane {
     private final ScrollPane originalScrollPane = createScrollPane(originalContent);
     private final ScrollPane vectorizedScrollPane = createScrollPane(vectorizedContent);
     private final ProgressIndicator progressIndicator = new ProgressIndicator();
-    private double scale = 1.0;
+    private final DoubleProperty zoom = new SimpleDoubleProperty(this, "zoom", 1.0);
+    private final StackPane previewStack = new StackPane();
+    private final SplitPane splitPane;
 
     public PreviewPane() {
+        getStyleClass().add("preview-pane");
         setPadding(new Insets(12));
         vectorizedWebView.setContextMenuEnabled(false);
+        vectorizedWebView.setPageFill(Color.TRANSPARENT);
         vectorizedWebView.setPrefSize(800, 600);
         vectorizedWebView.setMinSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
 
-        SplitPane splitPane = new SplitPane(
+        splitPane = new SplitPane(
                 createPreviewPanel("Original Image", originalScrollPane),
                 createPreviewPanel("Vectorized Result", vectorizedScrollPane));
         splitPane.setDividerPositions(0.5);
 
-        StackPane previewStack = new StackPane(splitPane, progressIndicator);
+        previewStack.getChildren().addAll(splitPane, progressIndicator);
         progressIndicator.setVisible(false);
         progressIndicator.setMaxSize(48, 48);
         setCenter(previewStack);
@@ -53,17 +67,20 @@ public class PreviewPane extends BorderPane {
     public void setImages(Image original, Path vectorizedSvg) {
         originalImageView.setImage(original);
         setImageSize(originalImageView, original);
+        if (original != null && original.getWidth() > 0 && original.getHeight() > 0) {
+            vectorizedWebView.setPrefSize(original.getWidth(), original.getHeight());
+        }
         loadSvg(vectorizedSvg);
-        scale = 1.0;
+        zoom.set(1.0);
         Platform.runLater(this::zoomToFit);
     }
 
     public void zoomIn() {
-        setScale(scale * ZOOM_IN_FACTOR);
+        setScale(zoom.get() * ZOOM_IN_FACTOR);
     }
 
     public void zoomOut() {
-        setScale(scale * ZOOM_OUT_FACTOR);
+        setScale(zoom.get() * ZOOM_OUT_FACTOR);
     }
 
     public void zoomToFit() {
@@ -100,9 +117,9 @@ public class PreviewPane extends BorderPane {
     }
 
     private void setScale(double requestedScale) {
-        scale = clamp(requestedScale, MIN_SCALE, MAX_SCALE);
-        resizeImage(originalImageView, scale);
-        vectorizedWebView.setZoom(scale);
+        zoom.set(clamp(requestedScale, MIN_SCALE, MAX_SCALE));
+        resizeImage(originalImageView, zoom.get());
+        vectorizedWebView.setZoom(zoom.get());
     }
 
     private static double clamp(double value, double minimum, double maximum) {
@@ -117,9 +134,12 @@ public class PreviewPane extends BorderPane {
     }
 
     private static ScrollPane createScrollPane(StackPane content) {
+        content.getStyleClass().add("preview-surface");
+        content.setBackground(createCheckerboardBackground());
         content.setAlignment(Pos.CENTER);
         content.setMinSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
         ScrollPane scrollPane = new ScrollPane(content);
+        scrollPane.getStyleClass().add("preview-scroll-pane");
         scrollPane.setFitToWidth(false);
         scrollPane.setFitToHeight(false);
         return scrollPane;
@@ -144,9 +164,34 @@ public class PreviewPane extends BorderPane {
     }
 
     private static VBox createPreviewPanel(String title, ScrollPane content) {
-        VBox panel = new VBox(8, new Label(title), content);
+        Label titleLabel = new Label(title);
+        titleLabel.getStyleClass().add("preview-title");
+        VBox panel = new VBox(8, titleLabel, content);
+        panel.getStyleClass().add("preview-panel");
         panel.setAlignment(Pos.TOP_CENTER);
         VBox.setVgrow(content, javafx.scene.layout.Priority.ALWAYS);
         return panel;
     }
+
+    private static Background createCheckerboardBackground() {
+        int tileSize = 24;
+        WritableImage tile = new WritableImage(tileSize, tileSize);
+        PixelWriter writer = tile.getPixelWriter();
+        Color light = Color.web("#30313A");
+        Color dark = Color.web("#27282F");
+        for (int y = 0; y < tileSize; y++) {
+            for (int x = 0; x < tileSize; x++) {
+                boolean firstTile = (x < tileSize / 2) == (y < tileSize / 2);
+                writer.setColor(x, y, firstTile ? light : dark);
+            }
+        }
+        BackgroundImage image = new BackgroundImage(
+                tile,
+                BackgroundRepeat.REPEAT,
+                BackgroundRepeat.REPEAT,
+                BackgroundPosition.DEFAULT,
+                BackgroundSize.DEFAULT);
+        return new Background(image);
+    }
+
 }

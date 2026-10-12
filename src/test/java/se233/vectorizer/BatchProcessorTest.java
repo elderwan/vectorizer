@@ -51,6 +51,30 @@ public class BatchProcessorTest {
     }
 
     @Test
+    void createsNumberedCustomNamesWithoutDuplicatingSvgExtension() throws Exception {
+        VectorizationService service = Mockito.mock(VectorizationService.class);
+        Path source = Files.writeString(tempDirectory.resolve("source.svg"), "<svg/>");
+        ImageItem first = item("first.png");
+        ImageItem second = item("second.png");
+        when(service.convertAsync(any(), any()))
+                .thenReturn(CompletableFuture.completedFuture(source));
+
+        ConversionSettings settings = new ConversionSettings();
+        settings.setNamingRule(ConversionSettings.NamingRule.PREFIX_NUMBER);
+        settings.setCustomName("MyVector.svg");
+
+        BatchProcessor.BatchResult result = new BatchProcessor(service)
+                .processAsync(List.of(first, second), settings, tempDirectory.resolve("named"), null)
+                .join();
+
+        assertEquals(List.of("MyVector_1.svg", "MyVector_2.svg"),
+                result.successes().stream()
+                        .map(path -> path.getFileName().toString())
+                        .sorted()
+                        .toList());
+    }
+
+    @Test
     void preprocessesMultipleImagesInParallelWithColorDetection() throws Exception {
         VectorizationService service = Mockito.mock(VectorizationService.class);
         Path source = Files.writeString(tempDirectory.resolve("source.svg"), "<svg/>");

@@ -16,6 +16,8 @@ public class ConversionSettingsTest {
         assertEquals(ConversionSettings.ColorMode.CUSTOM, settings.getColorMode());
         assertEquals(2, settings.getCustomColors());
         assertFalse(settings.isRemoveBackground());
+        assertEquals(ConversionSettings.NamingRule.ORIGINAL, settings.getNamingRule());
+        assertEquals("", settings.getCustomName());
     }
 
     @Test

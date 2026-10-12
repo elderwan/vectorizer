@@ -27,6 +27,8 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Executors;
@@ -53,8 +55,10 @@ public class MainViewController {
     private final ExecutorService previewExecutor =
             Executors.newSingleThreadExecutor(MainViewController::daemonThread);
     private final AtomicLong previewGeneration = new AtomicLong();
+    private final AtomicLong dataGeneration = new AtomicLong();
     private ScheduledFuture<?> pendingPreview;
     private Task<Void> currentPreviewTask;
+    private final Set<ImageItem> preprocessingItems = new HashSet<>();
     private int currentIndex;
 
     public MainViewController() {
@@ -83,21 +87,51 @@ public class MainViewController {
 
             List<ImageItem> loadedItems = new ArrayList<>();
             for (File file : imageFiles) {
+                if (imageItems.stream().anyMatch(item -> sameFile(item.getFile(), file))) {
+                    LOGGER.info("Skipping already loaded image: {}", file.getName());
+                    continue;
+                }
                 ImageItem item = new ImageItem(file);
                 loadedItems.add(item);
                 LOGGER.info("Image loaded: {}", file.getName());
             }
-            imageItems.clear();
+            if (loadedItems.isEmpty()) {
+                showError("The selected images are already loaded.");
+                return;
+            }
+            boolean firstLoad = imageItems.isEmpty();
             imageItems.addAll(loadedItems);
-            currentIndex = 0;
-            prepareInitialSettings();
+            preprocessingItems.addAll(loadedItems);
+            if (firstLoad) {
+                currentIndex = 0;
+            }
+            prepareInitialSettings(loadedItems);
             mainView.showEditor();
             refreshPreview();
-            startInitialPreprocessing();
+            startInitialPreprocessing(loadedItems);
         } catch (IOException | RuntimeException exception) {
             LOGGER.error("Unable to load selected files", exception);
             showError(userMessage(exception, "The selected files could not be loaded."));
         }
+    }
+
+    public void resetAll() {
+        LOGGER.info("Resetting all loaded images");
+        previewGeneration.incrementAndGet();
+        dataGeneration.incrementAndGet();
+        if (pendingPreview != null) {
+            pendingPreview.cancel(false);
+            pendingPreview = null;
+        }
+        if (currentPreviewTask != null && currentPreviewTask.isRunning()) {
+            currentPreviewTask.cancel();
+        }
+        imageItems.clear();
+        preprocessingItems.clear();
+        currentIndex = 0;
+        mainView.getPreviewPane().setBusy(false);
+        mainView.setProcessingVisible(false);
+        mainView.showDropZone();
     }
 
     public void showPrevious() {
@@ -123,17 +157,26 @@ public class MainViewController {
             return;
         }
         ImageItem item = imageItems.get(currentIndex);
+        ConversionSettings previous = copyOf(item.getSettings());
         copySettings(settings, item.getSettings());
         LOGGER.debug("Settings changed: detail={}, colors={}, customColors={}, removeBackground={}",
                 settings.getDetailLevel(), settings.getColorMode(), settings.getCustomColors(),
                 settings.isRemoveBackground());
-        schedulePreviewConversion();
+        if (vectorizationSettingsChanged(previous, settings)) {
+            schedulePreviewConversion();
+        }
     }
 
     public void exportAll() {
         if (imageItems.isEmpty()) {
             return;
         }
+        ConversionSettings settings = copyOf(imageItems.get(currentIndex).getSettings());
+        if (usesCustomNaming(settings) && settings.getCustomName().isBlank()) {
+            showError("Enter a custom prefix or name before exporting.");
+            return;
+        }
+
         DirectoryChooser chooser = new DirectoryChooser();
         chooser.setTitle("Choose an export folder");
         File directory = chooser.showDialog(getWindow());
@@ -141,7 +184,6 @@ public class MainViewController {
             return;
         }
 
-        ConversionSettings settings = copyOf(imageItems.get(currentIndex).getSettings());
         mainView.setProcessingVisible(true);
         mainView.getProgressBar().setProgress(0);
         mainView.getStatusLabel().setText("Exporting...");
@@ -188,6 +230,9 @@ public class MainViewController {
             currentPreviewTask.cancel();
         }
         ImageItem item = imageItems.get(currentIndex);
+        if (preprocessingItems.contains(item)) {
+            return;
+        }
         ConversionSettings settings = copyOf(item.getSettings());
         Task<Void> task = new Task<>() {
             @Override
@@ -224,37 +269,58 @@ public class MainViewController {
         previewExecutor.submit(task);
     }
 
-    private void startInitialPreprocessing() {
+    private void startInitialPreprocessing(List<ImageItem> itemsToProcess) {
+        long generation = dataGeneration.get();
         mainView.setProcessingVisible(true);
         mainView.getProgressBar().setProgress(0);
         mainView.getStatusLabel().setText("Preparing previews...");
         mainView.getPreviewPane().setBusy(true);
 
-        batchProcessor.preprocessAsync(imageItems, progress ->
+        batchProcessor.preprocessAsync(itemsToProcess, progress ->
                 Platform.runLater(() -> {
+                    if (generation != dataGeneration.get()) {
+                        return;
+                    }
                     mainView.getProgressBar().setProgress(
                             (double) progress.completed() / progress.total());
                     mainView.getStatusLabel().setText(
                             "Preparing " + progress.completed() + "/" + progress.total());
+                }), prepared -> Platform.runLater(() -> {
+                    if (generation != dataGeneration.get()) {
+                        return;
+                    }
+                    preprocessingItems.remove(prepared.item());
+                    prepared.item().setVectorizedPath(prepared.svg());
+                    if (!imageItems.isEmpty()
+                            && prepared.item() == imageItems.get(currentIndex)) {
+                        mainView.getConfigPane().setColorLimit(prepared.detectedColors());
+                        refreshPreview();
+                    }
                 })).whenComplete((result, throwable) -> Platform.runLater(() -> {
-            mainView.setProcessingVisible(false);
-            mainView.getPreviewPane().setBusy(false);
+            if (generation != dataGeneration.get()) {
+                return;
+            }
+            for (ImageItem item : itemsToProcess) {
+                preprocessingItems.remove(item);
+            }
+            boolean preprocessingStillRunning = !preprocessingItems.isEmpty();
+            mainView.setProcessingVisible(preprocessingStillRunning);
+            mainView.getPreviewPane().setBusy(preprocessingStillRunning);
             if (throwable != null) {
                 LOGGER.error("Initial preprocessing failed", unwrap(throwable));
                 showError(userMessage(unwrap(throwable),
                         "The images could not be prepared."));
                 return;
             }
-            for (BatchProcessor.PreprocessedItem item : result.successes()) {
-                item.item().setVectorizedPath(item.svg());
-            }
-            refreshPreview();
-            BatchProcessor.PreprocessedItem current = result.successes().stream()
-                    .filter(item -> item.item() == imageItems.get(currentIndex))
-                    .findFirst()
-                    .orElse(null);
-            if (current != null) {
-                mainView.getConfigPane().setColorLimit(current.detectedColors());
+            if (!imageItems.isEmpty()) {
+                refreshPreview();
+                BatchProcessor.PreprocessedItem current = result.successes().stream()
+                        .filter(item -> item.item() == imageItems.get(currentIndex))
+                        .findFirst()
+                        .orElse(null);
+                if (current != null) {
+                    mainView.getConfigPane().setColorLimit(current.detectedColors());
+                }
             }
             if (!result.failures().isEmpty()) {
                 LOGGER.error("Some initial previews failed: {}", result.failures().size());
@@ -290,13 +356,15 @@ public class MainViewController {
         });
     }
 
-    private void prepareInitialSettings() {
-        for (ImageItem item : imageItems) {
+    private void prepareInitialSettings(List<ImageItem> items) {
+        for (ImageItem item : items) {
             ConversionSettings settings = item.getSettings();
             settings.setDetailLevel(ConversionSettings.DetailLevel.MEDIUM);
             settings.setColorMode(ConversionSettings.ColorMode.CUSTOM);
             settings.setCustomColors(2);
             settings.setRemoveBackground(false);
+            settings.setNamingRule(ConversionSettings.NamingRule.ORIGINAL);
+            settings.setCustomName("");
         }
     }
 
@@ -345,6 +413,29 @@ public class MainViewController {
         target.setColorMode(source.getColorMode());
         target.setCustomColors(source.getCustomColors());
         target.setRemoveBackground(source.isRemoveBackground());
+        target.setNamingRule(source.getNamingRule());
+        target.setCustomName(source.getCustomName());
+    }
+
+    private static boolean sameFile(File first, File second) {
+        try {
+            return first.getCanonicalFile().equals(second.getCanonicalFile());
+        } catch (IOException exception) {
+            return first.getAbsoluteFile().equals(second.getAbsoluteFile());
+        }
+    }
+
+    private static boolean usesCustomNaming(ConversionSettings settings) {
+        return settings.getNamingRule() != ConversionSettings.NamingRule.ORIGINAL;
+    }
+
+    private static boolean vectorizationSettingsChanged(
+            ConversionSettings previous,
+            ConversionSettings current) {
+        return previous.getDetailLevel() != current.getDetailLevel()
+                || previous.getColorMode() != current.getColorMode()
+                || previous.getCustomColors() != current.getCustomColors()
+                || previous.isRemoveBackground() != current.isRemoveBackground();
     }
 
     private Window getWindow() {

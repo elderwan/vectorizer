@@ -26,10 +26,28 @@ public class ConversionSettings {
         CUSTOM
     }
 
+    public enum NamingRule {
+        ORIGINAL("Original Name"),
+        PREFIX_NUMBER("Custom Prefix + Number");
+
+        private final String label;
+
+        NamingRule(String label) {
+            this.label = label;
+        }
+
+        @Override
+        public String toString() {
+            return label;
+        }
+    }
+
     private DetailLevel detailLevel = DetailLevel.MEDIUM;
     private ColorMode colorMode = ColorMode.CUSTOM;
     private int customColors = 2;
     private boolean removeBackground;
+    private NamingRule namingRule = NamingRule.ORIGINAL;
+    private String customName = "";
 
     public DetailLevel getDetailLevel() {
         return detailLevel;
@@ -71,5 +89,24 @@ public class ConversionSettings {
 
     public void setRemoveBackground(boolean removeBackground) {
         this.removeBackground = removeBackground;
+    }
+
+    public NamingRule getNamingRule() {
+        return namingRule;
+    }
+
+    public void setNamingRule(NamingRule namingRule) {
+        if (namingRule == null) {
+            throw new IllegalArgumentException("Naming rule cannot be null");
+        }
+        this.namingRule = namingRule;
+    }
+
+    public String getCustomName() {
+        return customName;
+    }
+
+    public void setCustomName(String customName) {
+        this.customName = customName == null ? "" : customName.trim();
     }
 }

@@ -5,6 +5,8 @@ import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ProgressBar;
 import javafx.scene.control.ToolBar;
+import javafx.scene.input.Dragboard;
+import javafx.scene.input.TransferMode;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.StackPane;
 
@@ -21,28 +23,54 @@ public class MainView extends BorderPane {
     private final Label statusLabel = new Label();
 
     public MainView() {
+        getStyleClass().add("main-view");
+        editorPane.getStyleClass().add("editor-pane");
+
         dropZonePane = new DropZonePane(files -> {
             if (onFilesAccepted != null) {
                 onFilesAccepted.accept(files);
             }
         });
 
-        Button zoomIn = new Button("Zoom In");
-        Button zoomOut = new Button("Zoom Out");
-        Button zoomToFit = new Button("Zoom to Fit");
+        Button zoomIn = new Button("\uFF0B  Zoom In");
+        Button zoomOut = new Button("\uFF0D  Zoom Out");
+        Button zoomToFit = new Button("\u2922  Zoom to Fit");
+        zoomIn.getStyleClass().add("toolbar-button");
+        zoomOut.getStyleClass().add("toolbar-button");
+        zoomToFit.getStyleClass().add("toolbar-button");
         zoomIn.setOnAction(event -> previewPane.zoomIn());
         zoomOut.setOnAction(event -> previewPane.zoomOut());
         zoomToFit.setOnAction(event -> previewPane.zoomToFit());
 
         ToolBar zoomToolbar = new ToolBar(zoomIn, zoomOut, zoomToFit);
-        zoomToolbar.setPadding(new Insets(10));
+        zoomToolbar.getStyleClass().add("zoom-toolbar");
+        zoomToolbar.setPadding(new Insets(8, 12, 8, 12));
 
         editorPane.setTop(zoomToolbar);
         editorPane.setCenter(previewPane);
         editorPane.setRight(configPane);
+        editorPane.addEventFilter(javafx.scene.input.DragEvent.DRAG_OVER, event -> {
+            if (event.getDragboard().hasFiles()) {
+                event.acceptTransferModes(TransferMode.COPY);
+                event.consume();
+            }
+        });
+        editorPane.addEventFilter(javafx.scene.input.DragEvent.DRAG_DROPPED, event -> {
+            Dragboard board = event.getDragboard();
+            if (board.hasFiles()) {
+                if (onFilesAccepted != null) {
+                    onFilesAccepted.accept(board.getFiles());
+                }
+                event.setDropCompleted(true);
+                event.consume();
+            }
+        });
         progressBar.setVisible(false);
         statusLabel.setVisible(false);
+        statusLabel.getStyleClass().add("status-label");
+        progressBar.getStyleClass().add("status-progress");
         BorderPane statusBar = new BorderPane();
+        statusBar.getStyleClass().add("status-bar");
         statusBar.setLeft(statusLabel);
         statusBar.setRight(progressBar);
         statusBar.setPadding(new Insets(6, 10, 6, 10));
