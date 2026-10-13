@@ -5,6 +5,9 @@ import javafx.scene.image.Image;
 import java.io.File;
 import java.nio.file.Path;
 
+/**
+ * Represents one imported image and the result/settings associated with it.
+ */
 public class ImageItem {
     private final File file;
     private final Image originalImage;
@@ -12,6 +15,7 @@ public class ImageItem {
     private final ConversionSettings settings = new ConversionSettings();
 
     public ImageItem(File file) {
+        // Validate and load the original image once when the item is created.
         if (file == null || !file.isFile()) {
             throw new IllegalArgumentException("Image file must exist");
         }
@@ -35,6 +39,7 @@ public class ImageItem {
     }
 
     public void setVectorizedPath(Path vectorizedPath) {
+        // Store the generated SVG so the preview can display it later.
         this.vectorizedPath = vectorizedPath;
     }
 

@@ -25,8 +25,10 @@ import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 
 /**
- * Runs one-image conversions sequentially or in parallel according to the
- * assignment's batch trigger condition.
+ * Runs image preprocessing and export without blocking the JavaFX thread.
+ *
+ * Multiple images may be processed concurrently when the selected settings
+ * make parallel conversion safe and useful.
  */
 public class BatchProcessor {
     private static final Logger LOGGER = LogManager.getLogger(BatchProcessor.class);
@@ -51,6 +53,7 @@ public class BatchProcessor {
             ConversionSettings settings,
             Path outputDirectory,
             Consumer<BatchProgress> progressListener) {
+        // Copy the list so later UI changes cannot modify the running batch.
         List<ImageItem> snapshot = List.copyOf(items);
         return CompletableFuture.supplyAsync(() ->
                 process(snapshot, settings, outputDirectory, progressListener));
@@ -80,6 +83,7 @@ public class BatchProcessor {
     }
 
     public static boolean shouldProcessInParallel(List<ImageItem> items, ConversionSettings settings) {
+        // Parallel mode is enabled only for the supported multi-image case.
         return items.size() > 1
                 && settings.getDetailLevel() == ConversionSettings.DetailLevel.MEDIUM
                 && settings.getColorMode() == ConversionSettings.ColorMode.CUSTOM
@@ -91,6 +95,7 @@ public class BatchProcessor {
             ConversionSettings settings,
             Path outputDirectory,
             Consumer<BatchProgress> progressListener) {
+        // Submit conversion tasks, collect each completed result, and report progress.
         boolean parallel = shouldProcessInParallel(items, settings);
         LOGGER.info("Batch size: {}, parallel: {}", items.size(), parallel);
         List<Path> successes = new ArrayList<>();
@@ -141,6 +146,7 @@ public class BatchProcessor {
     private static List<String> createOutputNames(
             List<ImageItem> items,
             ConversionSettings settings) {
+        // Preserve original names or create numbered names from a custom prefix.
         ConversionSettings.NamingRule namingRule = settings.getNamingRule();
         if (namingRule == ConversionSettings.NamingRule.ORIGINAL) {
             return items.stream()

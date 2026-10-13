@@ -10,10 +10,14 @@ import java.io.File;
 import java.util.List;
 import java.util.function.Consumer;
 
+/**
+ * UI area that accepts image files or a ZIP file through drag and drop.
+ */
 public class DropZonePane extends VBox {
     private final Consumer<List<File>> filesConsumer;
 
     public DropZonePane(Consumer<List<File>> filesConsumer) {
+        // Keep file handling outside the view; the controller receives accepted files.
         this.filesConsumer = filesConsumer;
         getStyleClass().add("drop-zone");
         setAlignment(Pos.CENTER);
@@ -38,6 +42,7 @@ public class DropZonePane extends VBox {
             event.consume();
         });
         setOnDragDropped(event -> {
+            // Forward dropped files and report whether the drop was accepted.
             Dragboard board = event.getDragboard();
             boolean accepted = board.hasFiles();
             if (accepted) {

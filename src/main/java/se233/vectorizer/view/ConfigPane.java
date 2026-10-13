@@ -16,6 +16,9 @@ import se233.vectorizer.model.ConversionSettings;
 
 import java.util.function.Consumer;
 
+/**
+ * Displays conversion settings and exposes user actions to the controller.
+ */
 public class ConfigPane extends VBox {
     private final Button exportAllButton = new Button("Export All");
     private final Button resetButton = new Button("Reset");
@@ -35,6 +38,7 @@ public class ConfigPane extends VBox {
     private boolean updating;
 
     public ConfigPane() {
+        // Build controls, set default values, and configure dependent controls.
         getStyleClass().add("config-pane");
         setPadding(new Insets(16));
         setSpacing(12);
@@ -91,6 +95,7 @@ public class ConfigPane extends VBox {
     }
 
     public ConversionSettings readSettings() {
+        // Convert the current UI selections into the model used by the services.
         ConversionSettings settings = new ConversionSettings();
         settings.setDetailLevel(detailComboBox.getValue());
         settings.setColorMode(customRadio.isSelected()
@@ -104,6 +109,7 @@ public class ConfigPane extends VBox {
     }
 
     public void showSettings(ConversionSettings settings) {
+        // Copy model values back into the controls when the selected image changes.
         updating = true;
         try {
             detailComboBox.setValue(settings.getDetailLevel());
@@ -164,12 +170,14 @@ public class ConfigPane extends VBox {
     }
 
     private void notifySettingsChanged(Consumer<ConversionSettings> action) {
+        // Avoid callbacks while showSettings() is updating several controls at once.
         if (!updating) {
             action.accept(readSettings());
         }
     }
 
     private void updateCustomNameVisibility() {
+        // The custom name is needed only for the custom naming rule.
         boolean customNameRequired = namingRuleComboBox.getValue()
                 != ConversionSettings.NamingRule.ORIGINAL;
         customNameField.setVisible(customNameRequired);

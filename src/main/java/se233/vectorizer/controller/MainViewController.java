@@ -72,11 +72,13 @@ public class MainViewController {
 
     @FXML
     private void initialize() {
+        // Connect view events to controller actions when FXML creates the view.
         AllEventHandlers.install(this, mainView);
         mainView.showDropZone();
     }
 
     public void loadFiles(List<File> files) {
+        // Validate imports, create ImageItems, then start preview preparation.
         LOGGER.info("Files dropped: {}", files == null ? 0 : files.size());
         try {
             List<File> imageFiles = resolveImageFiles(files);
@@ -116,6 +118,7 @@ public class MainViewController {
     }
 
     public void resetAll() {
+        // Cancel pending work and return the UI to the initial drop screen.
         LOGGER.info("Resetting all loaded images");
         previewGeneration.incrementAndGet();
         dataGeneration.incrementAndGet();
@@ -153,6 +156,7 @@ public class MainViewController {
     }
 
     public void applySettings(ConversionSettings settings) {
+        // Save settings for the current image and refresh only when conversion input changed.
         if (imageItems.isEmpty()) {
             return;
         }
@@ -168,6 +172,7 @@ public class MainViewController {
     }
 
     public void exportAll() {
+        // Export every loaded image asynchronously and update progress on the JavaFX thread.
         if (imageItems.isEmpty()) {
             return;
         }
@@ -210,6 +215,7 @@ public class MainViewController {
     }
 
     private void schedulePreviewConversion() {
+        // Debounce rapid setting changes so previews are not converted repeatedly.
         if (imageItems.isEmpty()) {
             return;
         }
@@ -270,6 +276,7 @@ public class MainViewController {
     }
 
     private void startInitialPreprocessing(List<ImageItem> itemsToProcess) {
+        // Prepare previews and detect color limits for newly imported images in parallel.
         long generation = dataGeneration.get();
         mainView.setProcessingVisible(true);
         mainView.getProgressBar().setProgress(0);
@@ -385,6 +392,7 @@ public class MainViewController {
     }
 
     private List<File> resolveImageFiles(List<File> files) throws IOException {
+        // Accept multiple images or one ZIP, but never a mixture of both.
         if (files == null || files.isEmpty()) {
             return List.of();
         }

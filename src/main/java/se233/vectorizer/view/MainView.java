@@ -13,6 +13,9 @@ import javafx.scene.layout.StackPane;
 import java.io.File;
 import java.util.List;
 
+/**
+ * Main application view containing the drop zone, editor, preview, and status bar.
+ */
 public class MainView extends BorderPane {
     private final StackPane contentStack = new StackPane();
     private final DropZonePane dropZonePane;
@@ -23,6 +26,7 @@ public class MainView extends BorderPane {
     private final Label statusLabel = new Label();
 
     public MainView() {
+        // Compose the main layout and wire drag-and-drop/zoom behavior.
         getStyleClass().add("main-view");
         editorPane.getStyleClass().add("editor-pane");
 
@@ -83,6 +87,7 @@ public class MainView extends BorderPane {
     }
 
     private Button createZoomButton(String symbol, String label, Runnable action) {
+        // Create reusable buttons so all zoom controls share the same setup.
         Button button = new Button(symbol + "  " + label);
         button.getStyleClass().add("toolbar-button");
         button.setOnAction(event -> action.run());
@@ -91,10 +96,12 @@ public class MainView extends BorderPane {
     }
 
     public void showDropZone() {
+        // Show the initial screen before any image has been loaded.
         contentStack.getChildren().setAll(dropZonePane);
     }
 
     public void showEditor() {
+        // Replace the drop zone with the image editor after import.
         contentStack.getChildren().setAll(editorPane);
     }
 

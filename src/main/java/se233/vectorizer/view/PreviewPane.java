@@ -28,6 +28,9 @@ import javafx.beans.property.SimpleDoubleProperty;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+/**
+ * Displays the original image beside the generated SVG and provides zoom controls.
+ */
 public class PreviewPane extends BorderPane {
     private static final double ZOOM_IN_FACTOR = 1.2;
     private static final double ZOOM_OUT_FACTOR = 0.8;
@@ -46,6 +49,7 @@ public class PreviewPane extends BorderPane {
     private final SplitPane splitPane;
 
     public PreviewPane() {
+        // Build two synchronized preview panels and overlay a busy indicator.
         getStyleClass().add("preview-pane");
         setPadding(new Insets(12));
         vectorizedWebView.setContextMenuEnabled(false);
@@ -65,6 +69,7 @@ public class PreviewPane extends BorderPane {
     }
 
     public void setImages(Image original, Path vectorizedSvg) {
+        // Load both representations and reset the view to a fitted scale.
         originalImageView.setImage(original);
         setImageSize(originalImageView, original);
         if (original != null && original.getWidth() > 0 && original.getHeight() > 0) {
@@ -108,6 +113,7 @@ public class PreviewPane extends BorderPane {
     }
 
     private void loadSvg(Path svg) {
+        // WebView renders SVG files while showing a fallback for missing results.
         if (svg != null && Files.isRegularFile(svg)) {
             vectorizedWebView.getEngine().load(svg.toUri().toString());
         } else {

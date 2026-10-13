@@ -9,11 +9,15 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 
+/**
+ * Starts the JavaFX application, loads the main view, and applies the UI theme.
+ */
 public class Launcher extends Application {
     private static final Logger LOGGER = LogManager.getLogger(Launcher.class);
 
     @Override
     public void start(Stage stage) {
+        // Build the scene from FXML, attach CSS, and show the application window.
         try {
             FXMLLoader loader = new FXMLLoader(
                     Launcher.class.getResource("/se233/vectorizer/main-view.fxml"));
@@ -36,6 +40,7 @@ public class Launcher extends Application {
     }
 
     public static void main(String[] args) {
+        // Convert unexpected background errors into a log entry and visible alert.
         Thread.setDefaultUncaughtExceptionHandler((thread, exception) -> {
             LOGGER.error("Uncaught exception on thread {}", thread.getName(), exception);
             javafx.application.Platform.runLater(() ->

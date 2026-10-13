@@ -22,6 +22,9 @@ import java.util.concurrent.CompletionException;
 
 /**
  * Converts raster images to SVG through Potrace.
+ *
+ * The service quantizes image colors, creates one monochrome mask per color,
+ * traces each mask with Potrace, and merges the generated SVG layers.
  */
 public class VectorizationService {
     private static final Logger LOGGER = LogManager.getLogger(VectorizationService.class);
@@ -74,6 +77,7 @@ public class VectorizationService {
     }
 
     public CompletableFuture<Path> convertAsync(ImageItem item, ConversionSettings settings) {
+        // Run the potentially slow image conversion away from the JavaFX thread.
         if (item == null || settings == null) {
             return CompletableFuture.failedFuture(
                     new VectorizationException("Image item and settings are required"));
@@ -125,6 +129,7 @@ public class VectorizationService {
             Path output,
             int colorLimit,
             boolean preservePalette) throws IOException {
+        // Separate the image into color layers before invoking monochrome Potrace.
         QuantizedImage quantized = quantize(image, colorLimit, preservePalette);
         List<Path> layerSvgs = new ArrayList<>();
         List<Integer> layerColors = new ArrayList<>();
@@ -154,6 +159,7 @@ public class VectorizationService {
             Path output,
             ConversionSettings settings,
             String color) throws IOException {
+        // Execute Potrace for one mask and convert process failures into app errors.
         List<String> command = new ArrayList<>(commandPrefix);
         command.addAll(List.of(
                 "-s",
@@ -188,6 +194,7 @@ public class VectorizationService {
             BufferedImage image,
             int requestedColors,
             boolean preservePalette) {
+        // Sample pixels and use a bounded palette so large images stay responsive.
         int width = image.getWidth();
         int height = image.getHeight();
         int step = Math.max(1, (int) Math.ceil(
