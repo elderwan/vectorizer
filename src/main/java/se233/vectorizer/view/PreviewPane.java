@@ -31,6 +31,9 @@ import java.nio.file.Path;
 /**
  * Displays the original image beside the generated SVG and provides zoom controls.
  */
+/**
+ * Displays the original image beside its vectorized SVG preview.
+ */
 public class PreviewPane extends BorderPane {
     private static final double ZOOM_IN_FACTOR = 1.2;
     private static final double ZOOM_OUT_FACTOR = 0.8;
@@ -80,14 +83,23 @@ public class PreviewPane extends BorderPane {
         Platform.runLater(this::zoomToFit);
     }
 
+    /**
+     * Increases the preview scale by the configured zoom factor.
+     */
     public void zoomIn() {
         setScale(zoom.get() * ZOOM_IN_FACTOR);
     }
 
+    /**
+     * Decreases the preview scale by the configured zoom factor.
+     */
     public void zoomOut() {
         setScale(zoom.get() * ZOOM_OUT_FACTOR);
     }
 
+    /**
+     * Fits the original image inside the available preview viewport.
+     */
     public void zoomToFit() {
         Image image = originalImageView.getImage();
         if (image == null || image.getWidth() <= 0 || image.getHeight() <= 0) {
@@ -104,10 +116,20 @@ public class PreviewPane extends BorderPane {
                 MIN_SCALE, MAX_SCALE));
     }
 
+    /**
+     * Shows or hides the preview progress indicator.
+     *
+     * @param busy whether a conversion is currently running
+     */
     public void setBusy(boolean busy) {
         progressIndicator.setVisible(busy);
     }
 
+    /**
+     * Returns the progress indicator used during conversion.
+     *
+     * @return preview progress indicator
+     */
     public ProgressIndicator getProgressIndicator() {
         return progressIndicator;
     }

@@ -16,6 +16,9 @@ import java.util.List;
 /**
  * Main application view containing the drop zone, editor, preview, and status bar.
  */
+/**
+ * Builds the main application layout and exposes its reusable UI components.
+ */
 public class MainView extends BorderPane {
     private final StackPane contentStack = new StackPane();
     private final DropZonePane dropZonePane;
@@ -30,7 +33,7 @@ public class MainView extends BorderPane {
         getStyleClass().add("main-view");
         editorPane.getStyleClass().add("editor-pane");
 
-        dropZonePane = new DropZonePane(files -> {
+            dropZonePane = new DropZonePane(files -> {
             if (onFilesAccepted != null) {
                 onFilesAccepted.accept(files);
             }
@@ -82,6 +85,11 @@ public class MainView extends BorderPane {
 
     private java.util.function.Consumer<List<File>> onFilesAccepted;
 
+    /**
+     * Registers the callback used when files are accepted by the drop area.
+     *
+     * @param action callback that receives the accepted files
+     */
     public void setOnFilesAccepted(java.util.function.Consumer<List<File>> action) {
         onFilesAccepted = action;
     }
@@ -95,32 +103,63 @@ public class MainView extends BorderPane {
         return button;
     }
 
+    /**
+     * Shows the initial file drop screen.
+     */
     public void showDropZone() {
         // Show the initial screen before any image has been loaded.
         contentStack.getChildren().setAll(dropZonePane);
     }
 
+    /**
+     * Shows the editor containing preview and configuration controls.
+     */
     public void showEditor() {
         // Replace the drop zone with the image editor after import.
         contentStack.getChildren().setAll(editorPane);
     }
 
+    /**
+     * Returns the preview component.
+     *
+     * @return preview pane used by the editor
+     */
     public PreviewPane getPreviewPane() {
         return previewPane;
     }
 
+    /**
+     * Returns the settings component.
+     *
+     * @return configuration pane used by the editor
+     */
     public ConfigPane getConfigPane() {
         return configPane;
     }
 
+    /**
+     * Returns the processing progress bar.
+     *
+     * @return progress bar shown in the status area
+     */
     public ProgressBar getProgressBar() {
         return progressBar;
     }
 
+    /**
+     * Returns the processing status label.
+     *
+     * @return status label shown in the status area
+     */
     public Label getStatusLabel() {
         return statusLabel;
     }
 
+    /**
+     * Shows or hides the processing controls.
+     *
+     * @param visible whether the status controls should be visible
+     */
     public void setProcessingVisible(boolean visible) {
         progressBar.setVisible(visible);
         statusLabel.setVisible(visible);

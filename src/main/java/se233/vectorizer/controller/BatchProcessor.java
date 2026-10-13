@@ -25,7 +25,7 @@ import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 
 /**
- * Runs image preprocessing and export without blocking the JavaFX thread.
+ * Processes image batches asynchronously and reports progress and failures.
  *
  * Multiple images may be processed concurrently when the selected settings
  * make parallel conversion safe and useful.
@@ -35,6 +35,11 @@ public class BatchProcessor {
 
     private final VectorizationService vectorizationService;
 
+    /**
+     * Creates a batch processor with the conversion service it should use.
+     *
+     * @param vectorizationService service used for image conversion
+     */
     public BatchProcessor(VectorizationService vectorizationService) {
         this.vectorizationService = vectorizationService;
     }
@@ -67,6 +72,14 @@ public class BatchProcessor {
      * @param progressListener receives completed count and total count
      * @return future containing preview paths, detected colors, and failures
      */
+    /**
+     * Preprocesses images concurrently and reports each completed item.
+     *
+     * @param items images to preprocess
+     * @param progressListener receives completed count and total count
+     * @param itemListener receives each prepared image
+     * @return future containing preview results and failures
+     */
     public CompletableFuture<PreprocessResult> preprocessAsync(
             List<ImageItem> items,
             Consumer<BatchProgress> progressListener) {
@@ -82,6 +95,13 @@ public class BatchProcessor {
                 preprocess(snapshot, progressListener, itemListener));
     }
 
+    /**
+     * Determines whether the current batch qualifies for parallel processing.
+     *
+     * @param items images in the batch
+     * @param settings conversion settings selected by the user
+     * @return true when parallel processing should be used
+     */
     public static boolean shouldProcessInParallel(List<ImageItem> items, ConversionSettings settings) {
         // Parallel mode is enabled only for the supported multi-image case.
         return items.size() > 1
@@ -263,12 +283,31 @@ public class BatchProcessor {
         return extensionIndex > 0 ? name.substring(0, extensionIndex) : name;
     }
 
+    /**
+     * Reports the number of completed items in a batch.
+     *
+     * @param completed completed item count
+     * @param total total item count
+     */
     public record BatchProgress(int completed, int total) {
     }
 
+    /**
+     * Describes one failed batch item.
+     *
+     * @param message user-facing failure message
+     * @param cause underlying failure
+     */
     public record BatchFailure(String message, Throwable cause) {
     }
 
+    /**
+     * Contains successful outputs, failures, and the processing mode.
+     *
+     * @param successes generated output paths
+     * @param failures failed items
+     * @param parallel whether parallel processing was used
+     */
     public record BatchResult(List<Path> successes, List<BatchFailure> failures, boolean parallel) {
         public BatchResult {
             successes = List.copyOf(successes);
@@ -276,9 +315,23 @@ public class BatchProcessor {
         }
     }
 
+    /**
+     * Contains one prepared image and its detected color count.
+     *
+     * @param item prepared image item
+     * @param svg generated preview path
+     * @param detectedColors detected color count
+     */
     public record PreprocessedItem(ImageItem item, Path svg, int detectedColors) {
     }
 
+    /**
+     * Contains all preprocessing successes and failures.
+     *
+     * @param successes prepared image results
+     * @param failures preprocessing failures
+     * @param parallel whether preprocessing used parallel workers
+     */
     public record PreprocessResult(
             List<PreprocessedItem> successes,
             List<BatchFailure> failures,

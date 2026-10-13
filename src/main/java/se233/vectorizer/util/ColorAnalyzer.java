@@ -9,6 +9,9 @@ import java.util.Set;
 /**
  * Estimates the number of distinct RGB colors in a raster image.
  */
+/**
+ * Estimates the number of distinct colors in a raster image.
+ */
 public final class ColorAnalyzer {
     private static final int MAX_SAMPLED_PIXELS = 1_000_000;
 

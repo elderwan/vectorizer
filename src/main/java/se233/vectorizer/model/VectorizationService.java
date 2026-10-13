@@ -26,6 +26,9 @@ import java.util.concurrent.CompletionException;
  * The service quantizes image colors, creates one monochrome mask per color,
  * traces each mask with Potrace, and merges the generated SVG layers.
  */
+/**
+ * Converts raster images into layered SVG files through Potrace.
+ */
 public class VectorizationService {
     private static final Logger LOGGER = LogManager.getLogger(VectorizationService.class);
     private static final String DEFAULT_EXECUTABLE = "potrace";
@@ -40,10 +43,18 @@ public class VectorizationService {
 
     private final List<String> commandPrefix;
 
+    /**
+     * Creates a service using the default Potrace executable.
+     */
     public VectorizationService() {
         this(DEFAULT_EXECUTABLE);
     }
 
+    /**
+     * Creates a service using a custom Potrace executable name.
+     *
+     * @param executable executable command used to start Potrace
+     */
     public VectorizationService(String executable) {
         if (executable == null || executable.isBlank()) {
             throw new IllegalArgumentException("Potrace executable cannot be blank");
@@ -51,6 +62,11 @@ public class VectorizationService {
         commandPrefix = List.of(executable);
     }
 
+    /**
+     * Creates a service using a complete command prefix.
+     *
+     * @param commandPrefix command and fixed arguments used for Potrace
+     */
     public VectorizationService(List<String> commandPrefix) {
         if (commandPrefix == null || commandPrefix.isEmpty()
                 || commandPrefix.get(0) == null || commandPrefix.get(0).isBlank()) {
@@ -59,6 +75,11 @@ public class VectorizationService {
         this.commandPrefix = List.copyOf(commandPrefix);
     }
 
+    /**
+     * Checks whether the default Potrace command can be started.
+     *
+     * @return true when Potrace is available
+     */
     public static boolean checkPotraceAvailable() {
         Boolean cached = potraceAvailable;
         if (cached != null) {
@@ -72,10 +93,20 @@ public class VectorizationService {
         }
     }
 
+    /**
+     * Clears the cached Potrace availability result.
+     */
     public static void resetPotraceAvailabilityCache() {
         potraceAvailable = null;
     }
 
+    /**
+     * Converts an image asynchronously so the caller thread remains responsive.
+     *
+     * @param item image and image-specific settings to convert
+     * @param settings conversion settings to apply
+     * @return future containing the generated SVG path
+     */
     public CompletableFuture<Path> convertAsync(ImageItem item, ConversionSettings settings) {
         // Run the potentially slow image conversion away from the JavaFX thread.
         if (item == null || settings == null) {

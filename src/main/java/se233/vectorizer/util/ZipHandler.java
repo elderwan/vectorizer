@@ -12,6 +12,9 @@ import java.util.zip.ZipException;
 import java.util.zip.ZipInputStream;
 import se233.vectorizer.exception.UnsupportedFileFormatException;
 
+/**
+ * Extracts supported images from ZIP archives.
+ */
 public final class ZipHandler {
     /**
      * Prevents creating this utility class.

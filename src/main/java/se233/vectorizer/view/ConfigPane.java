@@ -19,6 +19,9 @@ import java.util.function.Consumer;
 /**
  * Displays conversion settings and exposes user actions to the controller.
  */
+/**
+ * Displays conversion controls and forwards user actions to the controller.
+ */
 public class ConfigPane extends VBox {
     private final Button exportAllButton = new Button("Export All");
     private final Button resetButton = new Button("Reset");
@@ -94,6 +97,11 @@ public class ConfigPane extends VBox {
                 createSection("Navigation", createNavigation()));
     }
 
+    /**
+     * Reads the current control values into a conversion settings object.
+     *
+     * @return settings selected in the configuration controls
+     */
     public ConversionSettings readSettings() {
         // Convert the current UI selections into the model used by the services.
         ConversionSettings settings = new ConversionSettings();
@@ -108,6 +116,11 @@ public class ConfigPane extends VBox {
         return settings;
     }
 
+    /**
+     * Displays the settings stored in the supplied conversion model.
+     *
+     * @param settings settings to copy into the controls
+     */
     public void showSettings(ConversionSettings settings) {
         // Copy model values back into the controls when the selected image changes.
         updating = true;
@@ -126,22 +139,47 @@ public class ConfigPane extends VBox {
         }
     }
 
+    /**
+     * Connects the Export All button to a controller action.
+     *
+     * @param action action invoked when Export All is clicked
+     */
     public void setOnExportAll(Runnable action) {
         exportAllButton.setOnAction(event -> action.run());
     }
 
+    /**
+     * Connects the Reset button to a controller action.
+     *
+     * @param action action invoked when Reset is clicked
+     */
     public void setOnReset(Runnable action) {
         resetButton.setOnAction(event -> action.run());
     }
 
+    /**
+     * Connects the Back button to a controller action.
+     *
+     * @param action action invoked when Back is clicked
+     */
     public void setOnBack(Runnable action) {
         backButton.setOnAction(event -> action.run());
     }
 
+    /**
+     * Connects the Next button to a controller action.
+     *
+     * @param action action invoked when Next is clicked
+     */
     public void setOnNext(Runnable action) {
         nextButton.setOnAction(event -> action.run());
     }
 
+    /**
+     * Connects setting controls to a callback that receives updated settings.
+     *
+     * @param action callback invoked after a user setting changes
+     */
     public void setOnSettingsChanged(Consumer<ConversionSettings> action) {
         detailComboBox.valueProperty().addListener((observable, oldValue, newValue) -> notifySettingsChanged(action));
         namingRuleComboBox.valueProperty().addListener((observable, oldValue, newValue) ->
@@ -156,11 +194,21 @@ public class ConfigPane extends VBox {
                 .addListener((observable, oldValue, newValue) -> notifySettingsChanged(action));
     }
 
+    /**
+     * Enables or disables image navigation buttons.
+     *
+     * @param disabled whether navigation should be disabled
+     */
     public void setNavigationDisabled(boolean disabled) {
         backButton.setDisable(disabled);
         nextButton.setDisable(disabled);
     }
 
+    /**
+     * Limits the color spinner to the colors detected in the current image.
+     *
+     * @param detectedColors number of colors detected in the image
+     */
     public void setColorLimit(int detectedColors) {
         int maximum = Math.max(2, Math.min(
                 ConversionSettings.MAX_CUSTOM_COLORS, detectedColors));

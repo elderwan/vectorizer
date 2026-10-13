@@ -13,9 +13,17 @@ import java.util.function.Consumer;
 /**
  * UI area that accepts image files or a ZIP file through drag and drop.
  */
+/**
+ * Displays the file drop area and forwards accepted files to the caller.
+ */
 public class DropZonePane extends VBox {
     private final Consumer<List<File>> filesConsumer;
 
+    /**
+     * Creates a drop zone that forwards accepted files to a callback.
+     *
+     * @param filesConsumer callback that receives dropped files
+     */
     public DropZonePane(Consumer<List<File>> filesConsumer) {
         // Keep file handling outside the view; the controller receives accepted files.
         this.filesConsumer = filesConsumer;

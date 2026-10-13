@@ -1,5 +1,8 @@
 package se233.vectorizer.model;
 
+/**
+ * Stores and validates the options used during image conversion.
+ */
 public class ConversionSettings {
     public static final int MIN_CUSTOM_COLORS = 1;
     public static final int MAX_CUSTOM_COLORS = 5;

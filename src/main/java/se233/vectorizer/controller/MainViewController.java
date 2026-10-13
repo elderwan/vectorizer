@@ -41,6 +41,9 @@ import java.util.concurrent.CompletionException;
 /**
  * Coordinates file loading, asynchronous previews, navigation, and export.
  */
+/**
+ * Coordinates file loading, settings, previews, navigation, and export.
+ */
 public class MainViewController {
     private static final Logger LOGGER = LogManager.getLogger(MainViewController.class);
 
@@ -65,6 +68,11 @@ public class MainViewController {
         this(new VectorizationService());
     }
 
+    /**
+     * Creates a controller using the supplied vectorization service.
+     *
+     * @param vectorizationService service used to convert images
+     */
     public MainViewController(VectorizationService vectorizationService) {
         this.vectorizationService = vectorizationService;
         this.batchProcessor = new BatchProcessor(vectorizationService);
@@ -77,6 +85,11 @@ public class MainViewController {
         mainView.showDropZone();
     }
 
+    /**
+     * Loads supported images, displays the editor, and starts preprocessing.
+     *
+     * @param files files accepted from the user interface
+     */
     public void loadFiles(List<File> files) {
         // Validate imports, create ImageItems, then start preview preparation.
         LOGGER.info("Files dropped: {}", files == null ? 0 : files.size());
@@ -117,6 +130,9 @@ public class MainViewController {
         }
     }
 
+    /**
+     * Cancels current work and clears all imported images.
+     */
     public void resetAll() {
         // Cancel pending work and return the UI to the initial drop screen.
         LOGGER.info("Resetting all loaded images");
@@ -137,6 +153,9 @@ public class MainViewController {
         mainView.showDropZone();
     }
 
+    /**
+     * Selects and displays the previous imported image.
+     */
     public void showPrevious() {
         if (currentIndex > 0) {
             currentIndex--;
@@ -146,6 +165,9 @@ public class MainViewController {
         }
     }
 
+    /**
+     * Selects and displays the next imported image.
+     */
     public void showNext() {
         if (currentIndex < imageItems.size() - 1) {
             currentIndex++;
@@ -155,6 +177,11 @@ public class MainViewController {
         }
     }
 
+    /**
+     * Applies settings to the current image and schedules a new preview.
+     *
+     * @param settings settings selected in the configuration pane
+     */
     public void applySettings(ConversionSettings settings) {
         // Save settings for the current image and refresh only when conversion input changed.
         if (imageItems.isEmpty()) {
@@ -171,6 +198,9 @@ public class MainViewController {
         }
     }
 
+    /**
+     * Exports all imported images to a user-selected directory.
+     */
     public void exportAll() {
         // Export every loaded image asynchronously and update progress on the JavaFX thread.
         if (imageItems.isEmpty()) {

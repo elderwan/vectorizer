@@ -4,6 +4,9 @@ import java.io.File;
 import java.util.Arrays;
 import java.util.Locale;
 
+/**
+ * Provides validation helpers for supported image and archive files.
+ */
 public final class FileValidator {
     /**
      * Prevents creating this utility class.
@@ -27,6 +30,12 @@ public final class FileValidator {
      * @param fileName file name to inspect
      * @return true for a JPG, JPEG, or PNG name, ignoring case
      */
+    /**
+     * Checks whether a filename has a supported raster-image extension.
+     *
+     * @param fileName filename to inspect
+     * @return true for JPG, JPEG, or PNG names
+     */
     public static boolean isSupportedImageName(String fileName) {
         return fileName != null && hasExtension(fileName, ".jpg", ".jpeg", ".png");
     }
@@ -37,6 +46,12 @@ public final class FileValidator {
      * @param file file to inspect
      * @return true for an existing ZIP file
      */
+    /**
+     * Checks whether a regular file has a ZIP extension.
+     *
+     * @param file file to inspect
+     * @return true when the file is a ZIP archive
+     */
     public static boolean isZip(File file) {
         return isRegularFile(file) && hasExtension(file, ".zip");
     }
@@ -46,6 +61,12 @@ public final class FileValidator {
      *
      * @param file file to inspect
      * @return true for a supported image or ZIP file
+     */
+    /**
+     * Checks whether a file is an accepted application input.
+     *
+     * @param file file to inspect
+     * @return true for a supported image or ZIP archive
      */
     public static boolean isSupportedInput(File file) {
         return isSupportedImage(file) || isZip(file);

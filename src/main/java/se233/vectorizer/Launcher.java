@@ -15,6 +15,11 @@ import java.io.IOException;
 public class Launcher extends Application {
     private static final Logger LOGGER = LogManager.getLogger(Launcher.class);
 
+    /**
+     * Creates and displays the primary application window.
+     *
+     * @param stage JavaFX stage used as the application window
+     */
     @Override
     public void start(Stage stage) {
         // Build the scene from FXML, attach CSS, and show the application window.
@@ -39,6 +44,11 @@ public class Launcher extends Application {
         }
     }
 
+    /**
+     * Starts the JavaFX application and installs the global error handler.
+     *
+     * @param args command-line arguments
+     */
     public static void main(String[] args) {
         // Convert unexpected background errors into a log entry and visible alert.
         Thread.setDefaultUncaughtExceptionHandler((thread, exception) -> {

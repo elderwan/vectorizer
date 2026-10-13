@@ -2,7 +2,10 @@ package se233.vectorizer.controller;
 
 import se233.vectorizer.view.MainView;
 
-public final class  AllEventHandlers {
+/**
+ * Connects user-interface events to controller actions.
+ */
+public final class AllEventHandlers {
     /**
      * Prevents creating this event-wiring utility class.
      */
