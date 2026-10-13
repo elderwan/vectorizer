@@ -12,6 +12,9 @@ import java.util.Set;
 public final class ColorAnalyzer {
     private static final int MAX_SAMPLED_PIXELS = 1_000_000;
 
+    /**
+     * Prevents creating this utility class.
+     */
     private ColorAnalyzer() {
     }
 
@@ -35,12 +38,26 @@ public final class ColorAnalyzer {
                 Math.max(1, colors.size()));
     }
 
+    /**
+     * Calculates the number of pixels to skip while sampling an image.
+     *
+     * @param image image whose size determines the sampling step
+     * @return positive sampling step
+     */
     private static int calculateSamplingStep(BufferedImage image) {
         long pixelCount = (long) image.getWidth() * image.getHeight();
         return Math.max(1, (int) Math.ceil(
                 (double) pixelCount / MAX_SAMPLED_PIXELS));
     }
 
+    /**
+     * Adds sampled RGB colors to the supplied set until the image is scanned
+     * or the supported color limit is reached.
+     *
+     * @param image image to scan
+     * @param step number of pixels to skip between samples
+     * @param colors set that receives detected RGB values
+     */
     private static void collectColors(BufferedImage image, int step, Set<Integer> colors) {
         for (int y = 0; y < image.getHeight(); y += step) {
             for (int x = 0; x < image.getWidth(); x += step) {
@@ -52,10 +69,24 @@ public final class ColorAnalyzer {
         }
     }
 
+    /**
+     * Reads one pixel's RGB value without its alpha channel.
+     *
+     * @param image image containing the pixel
+     * @param x horizontal pixel coordinate
+     * @param y vertical pixel coordinate
+     * @return RGB value with alpha bits removed
+     */
     private static int rgbWithoutAlpha(BufferedImage image, int x, int y) {
         return image.getRGB(x, y) & 0x00FFFFFF;
     }
 
+    /**
+     * Checks whether enough distinct colors have been found to stop scanning.
+     *
+     * @param colors detected color set
+     * @return true when the color limit has been exceeded
+     */
     private static boolean hasReachedColorLimit(Set<Integer> colors) {
         return colors.size() > ConversionSettings.MAX_CUSTOM_COLORS;
     }
