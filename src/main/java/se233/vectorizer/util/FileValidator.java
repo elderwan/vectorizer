@@ -1,6 +1,7 @@
 package se233.vectorizer.util;
 
 import java.io.File;
+import java.util.Arrays;
 import java.util.Locale;
 
 public final class FileValidator {
@@ -8,7 +9,7 @@ public final class FileValidator {
     }
 
     public static boolean isSupportedImage(File file) {
-        return file != null && file.isFile() && isSupportedImageName(file.getName());
+        return isRegularFile(file) && isSupportedImageName(file.getName());
     }
 
     public static boolean isSupportedImageName(String fileName) {
@@ -16,7 +17,7 @@ public final class FileValidator {
     }
 
     public static boolean isZip(File file) {
-        return file != null && file.isFile() && hasExtension(file, ".zip");
+        return isRegularFile(file) && hasExtension(file, ".zip");
     }
 
     public static boolean isSupportedInput(File file) {
@@ -28,12 +29,11 @@ public final class FileValidator {
     }
 
     private static boolean hasExtension(String fileName, String... extensions) {
-        String name = fileName.toLowerCase(Locale.ROOT);
-        for (String extension : extensions) {
-            if (name.endsWith(extension)) {
-                return true;
-            }
-        }
-        return false;
+        String normalizedName = fileName.toLowerCase(Locale.ROOT);
+        return Arrays.stream(extensions).anyMatch(normalizedName::endsWith);
+    }
+
+    private static boolean isRegularFile(File file) {
+        return file != null && file.isFile();
     }
 }

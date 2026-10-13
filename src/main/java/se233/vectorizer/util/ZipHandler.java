@@ -22,26 +22,21 @@ public final class ZipHandler {
     }
 
     public static List<File> extractImages(File zipFile, Path destination) throws IOException {
-        if (!FileValidator.isZip(zipFile)) {
-            throw new UnsupportedFileFormatException("Expected a ZIP file");
-        }
+        validateArchive(zipFile);
         Files.createDirectories(destination);
-        Path normalizedDestination = destination.toAbsolutePath().normalize();
+        Path extractionRoot = normalize(destination);
         List<File> images = new ArrayList<>();
-        boolean sawEntry = false;
+        boolean archiveContainsEntry = false;
 
         try (InputStream input = Files.newInputStream(zipFile.toPath());
              ZipInputStream zipInput = new ZipInputStream(input)) {
             ZipEntry entry;
             while ((entry = zipInput.getNextEntry()) != null) {
-                sawEntry = true;
+                archiveContainsEntry = true;
                 if (entry.isDirectory()) {
                     continue;
                 }
-                Path output = normalizedDestination.resolve(entry.getName()).normalize();
-                if (!output.startsWith(normalizedDestination)) {
-                    throw new IOException("ZIP entry escapes extraction directory: " + entry.getName());
-                }
+                Path output = resolveEntry(extractionRoot, entry);
                 if (!FileValidator.isSupportedImageName(entry.getName())) {
                     continue;
                 }
@@ -49,12 +44,30 @@ public final class ZipHandler {
                 Files.copy(zipInput, output);
                 images.add(output.toFile());
             }
-            if (!sawEntry) {
+            if (!archiveContainsEntry) {
                 throw new UnsupportedFileFormatException("The ZIP archive is corrupted or empty.");
             }
         } catch (ZipException exception) {
             throw new UnsupportedFileFormatException("The ZIP archive is corrupted.", exception);
         }
         return images;
+    }
+
+    private static void validateArchive(File zipFile) {
+        if (!FileValidator.isZip(zipFile)) {
+            throw new UnsupportedFileFormatException("Expected a ZIP file");
+        }
+    }
+
+    private static Path normalize(Path path) {
+        return path.toAbsolutePath().normalize();
+    }
+
+    private static Path resolveEntry(Path extractionRoot, ZipEntry entry) throws IOException {
+        Path output = extractionRoot.resolve(entry.getName()).normalize();
+        if (!output.startsWith(extractionRoot)) {
+            throw new IOException("ZIP entry escapes extraction directory: " + entry.getName());
+        }
+        return output;
     }
 }

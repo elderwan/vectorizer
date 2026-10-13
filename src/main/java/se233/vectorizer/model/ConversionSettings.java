@@ -9,15 +9,15 @@ public class ConversionSettings {
         MEDIUM("Medium"),
         HIGH("High");
 
-        private final String label;
+        private final String displayName;
 
-        DetailLevel(String label) {
-            this.label = label;
+        DetailLevel(String displayName) {
+            this.displayName = displayName;
         }
 
         @Override
         public String toString() {
-            return label;
+            return displayName;
         }
     }
 
@@ -30,15 +30,15 @@ public class ConversionSettings {
         ORIGINAL("Original Name"),
         PREFIX_NUMBER("Custom Prefix + Number");
 
-        private final String label;
+        private final String displayName;
 
-        NamingRule(String label) {
-            this.label = label;
+        NamingRule(String displayName) {
+            this.displayName = displayName;
         }
 
         @Override
         public String toString() {
-            return label;
+            return displayName;
         }
     }
 
@@ -54,9 +54,7 @@ public class ConversionSettings {
     }
 
     public void setDetailLevel(DetailLevel detailLevel) {
-        if (detailLevel == null) {
-            throw new IllegalArgumentException("Detail level cannot be null");
-        }
+        requireValue(detailLevel, "Detail level cannot be null");
         this.detailLevel = detailLevel;
     }
 
@@ -65,9 +63,7 @@ public class ConversionSettings {
     }
 
     public void setColorMode(ColorMode colorMode) {
-        if (colorMode == null) {
-            throw new IllegalArgumentException("Color mode cannot be null");
-        }
+        requireValue(colorMode, "Color mode cannot be null");
         this.colorMode = colorMode;
     }
 
@@ -76,10 +72,7 @@ public class ConversionSettings {
     }
 
     public void setCustomColors(int customColors) {
-        if (customColors < MIN_CUSTOM_COLORS || customColors > MAX_CUSTOM_COLORS) {
-            throw new IllegalArgumentException("Custom colors must be between "
-                    + MIN_CUSTOM_COLORS + " and " + MAX_CUSTOM_COLORS);
-        }
+        validateCustomColorCount(customColors);
         this.customColors = customColors;
     }
 
@@ -96,9 +89,7 @@ public class ConversionSettings {
     }
 
     public void setNamingRule(NamingRule namingRule) {
-        if (namingRule == null) {
-            throw new IllegalArgumentException("Naming rule cannot be null");
-        }
+        requireValue(namingRule, "Naming rule cannot be null");
         this.namingRule = namingRule;
     }
 
@@ -108,5 +99,19 @@ public class ConversionSettings {
 
     public void setCustomName(String customName) {
         this.customName = customName == null ? "" : customName.trim();
+    }
+
+    private static void validateCustomColorCount(int colorCount) {
+        if (colorCount >= MIN_CUSTOM_COLORS && colorCount <= MAX_CUSTOM_COLORS) {
+            return;
+        }
+        throw new IllegalArgumentException("Custom colors must be between "
+                + MIN_CUSTOM_COLORS + " and " + MAX_CUSTOM_COLORS);
+    }
+
+    private static <T> void requireValue(T value, String message) {
+        if (value == null) {
+            throw new IllegalArgumentException(message);
+        }
     }
 }
