@@ -32,19 +32,14 @@ public class MainView extends BorderPane {
             }
         });
 
-        Button zoomIn = new Button("\uFF0B  Zoom In");
-        Button zoomOut = new Button("\uFF0D  Zoom Out");
-        Button zoomToFit = new Button("\u2922  Zoom to Fit");
-        zoomIn.getStyleClass().add("toolbar-button");
-        zoomOut.getStyleClass().add("toolbar-button");
-        zoomToFit.getStyleClass().add("toolbar-button");
-        zoomIn.setOnAction(event -> previewPane.zoomIn());
-        zoomOut.setOnAction(event -> previewPane.zoomOut());
-        zoomToFit.setOnAction(event -> previewPane.zoomToFit());
+        Button zoomIn = createZoomButton("＋", "Zoom In", previewPane::zoomIn);
+        Button zoomOut = createZoomButton("－", "Zoom Out", previewPane::zoomOut);
+        Button zoomToFit = createZoomButton("⌂", "Zoom to Fit", previewPane::zoomToFit);
 
         ToolBar zoomToolbar = new ToolBar(zoomIn, zoomOut, zoomToFit);
         zoomToolbar.getStyleClass().add("zoom-toolbar");
         zoomToolbar.setPadding(new Insets(8, 12, 8, 12));
+        zoomToolbar.setFocusTraversable(false);
 
         editorPane.setTop(zoomToolbar);
         editorPane.setCenter(previewPane);
@@ -85,6 +80,14 @@ public class MainView extends BorderPane {
 
     public void setOnFilesAccepted(java.util.function.Consumer<List<File>> action) {
         onFilesAccepted = action;
+    }
+
+    private Button createZoomButton(String symbol, String label, Runnable action) {
+        Button button = new Button(symbol + "  " + label);
+        button.getStyleClass().add("toolbar-button");
+        button.setOnAction(event -> action.run());
+        button.setFocusTraversable(false);
+        return button;
     }
 
     public void showDropZone() {

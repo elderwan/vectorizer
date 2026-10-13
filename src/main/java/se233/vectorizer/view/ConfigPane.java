@@ -76,12 +76,11 @@ public class ConfigPane extends VBox {
         VBox spacer = new VBox();
         VBox.setVgrow(spacer, javafx.scene.layout.Priority.ALWAYS);
 
+        HBox actionRow = createActionRow();
+
         getChildren().addAll(
-                exportAllButton,
-                resetButton,
-                createSection("File naming", new VBox(8,
-                        namingRuleComboBox,
-                        customNameField)),
+                actionRow,
+                createSection("File naming", createFileNamingSection()),
                 createSection("Detail", detailComboBox),
                 createSection("Colors", new VBox(8,
                         new HBox(10, unlimitedRadio, customRadio),
@@ -175,6 +174,22 @@ public class ConfigPane extends VBox {
                 != ConversionSettings.NamingRule.ORIGINAL;
         customNameField.setVisible(customNameRequired);
         customNameField.setManaged(customNameRequired);
+    }
+
+    private HBox createActionRow() {
+        HBox actionRow = new HBox(8, exportAllButton, resetButton);
+        actionRow.setMaxWidth(Double.MAX_VALUE);
+        exportAllButton.setMaxWidth(Double.MAX_VALUE);
+        resetButton.setMaxWidth(Double.MAX_VALUE);
+        HBox.setHgrow(exportAllButton, javafx.scene.layout.Priority.ALWAYS);
+        HBox.setHgrow(resetButton, javafx.scene.layout.Priority.ALWAYS);
+        return actionRow;
+    }
+
+    private VBox createFileNamingSection() {
+        VBox fileNamingBox = new VBox(8, namingRuleComboBox, customNameField);
+        fileNamingBox.setMaxWidth(Double.MAX_VALUE);
+        return fileNamingBox;
     }
 
     private HBox createNavigation() {
