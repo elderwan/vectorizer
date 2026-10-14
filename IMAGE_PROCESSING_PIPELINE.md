@@ -9,38 +9,36 @@
 ```mermaid
 sequenceDiagram
     autonumber
-    actor User as 用户 (User)
-    participant EH as AllEventHandlers
-    participant FV as FileValidator / ZipHandler
-    participant MC as MainViewController
-    participant BP as BatchProcessor (多线程)
-    participant VS as VectorizationService (算法核心)
-    participant CLI as 外部 Potrace CLI
-    participant PP as PreviewPane (UI 渲染)
+    actor User as "User"
+    participant EH as "AllEventHandlers"
+    participant FV as "FileValidator / ZipHandler"
+    participant MC as "MainViewController"
+    participant BP as "BatchProcessor"
+    participant VS as "VectorizationService"
+    participant CLI as "Potrace CLI"
+    participant PP as "PreviewPane"
 
-    User->>EH: 1. 拖入图片或 ZIP 文件 (Drag & Drop)
-    EH->>EH: 首先进入 handleDrop(files, ...)
-    EH->>FV: 2. 校验文件有效性 / 解压 ZIP (防 ZIP Slip)
-    FV-->>EH: 返回合法的 File 列表
+    User->>EH: 1. 拖入图片或 ZIP 文件 (Drag and Drop)
+    EH->>EH: 首先进入 handleDrop 方法
+    EH->>FV: 2. 校验文件格式 / 解压 ZIP (防范 ZIP Slip)
+    FV-->>EH: 返回合法的文件列表
     EH->>MC: 3. 调用 loadImages(validFiles)
     MC->>MC: 生成版本号自增 (generation.incrementAndGet)
-    MC->>BP: 4. 提交后台多线程分析 preprocessAsync(...)
-    BP-->>MC: 分析完成回调 (首张图片尺寸、颜色数)
-    MC->>PP: 5. 左侧面板显示原图，显示加载动画
-    MC->>MC: 6. 防抖延时 300ms 调度 scheduleDebouncedConversion()
-    MC->>VS: 7. 异步发起矢量化 convertAsync(item, settings)
-    rect rgb(240, 248, 255)
-        note over VS: 图像算法核心处理 (K-Means + 背景检测)
-        VS->>VS: A. K-Means 颜色量化聚类 (最多16色)
-        VS->>VS: B. 智能多图层渐变背景检测 detectBackgroundLayers()
-        VS->>VS: C. 生成单色二值化掩码 writeMaskPnm()
-        VS->>CLI: D. ProcessBuilder 调用外部 Potrace CLI
-        CLI-->>VS: 返回各图层单色 SVG
-        VS->>VS: E. 提取 <g> 路径合并为统一多层 SVG
-    end
-    VS-->>MC: 8. 返回生成好的 .svg 临时文件路径
-    MC->>MC: 9. 写入当前设置缓存 (ImageItem 缓存机制)
-    MC->>PP: 10. WebView 加载渲染矢量图，隐藏 Loading 动画
+    MC->>BP: 4. 提交后台并发分析 preprocessAsync
+    BP-->>MC: 分析完成回调 (图片尺寸与色彩数)
+    MC->>PP: 5. 左侧显示原图，显示 Loading 动画
+    MC->>MC: 6. 防抖延时 300ms 调度
+    MC->>VS: 7. 异步提交矢量化 convertAsync
+    Note over VS: 图像核心算法处理阶段
+    VS->>VS: A. K-Means 颜色量化聚类
+    VS->>VS: B. 智能多图层渐变背景检测
+    VS->>VS: C. 生成单色掩码 PPM
+    VS->>CLI: D. ProcessBuilder 调用外部 Potrace
+    CLI-->>VS: 返回各图层单色 SVG
+    VS->>VS: E. 提取路径合并为多层 SVG
+    VS-->>MC: 8. 返回生成好的 SVG 文件路径
+    MC->>MC: 9. 写入当前设置缓存
+    MC->>PP: 10. WebView 加载渲染矢量图并关闭 Loading
 ```
 
 ---

@@ -9,38 +9,36 @@
 ```mermaid
 sequenceDiagram
     autonumber
-    actor User as ผู้ใช้งาน (User)
-    participant EH as AllEventHandlers
-    participant FV as FileValidator / ZipHandler
-    participant MC as MainViewController
-    participant BP as BatchProcessor (มัลติเธรด)
-    participant VS as VectorizationService (อัลกอริทึมหลัก)
-    participant CLI as โปรแกรมภายนอก Potrace CLI
-    participant PP as PreviewPane (การแสดงผล UI)
+    actor User as "User"
+    participant EH as "AllEventHandlers"
+    participant FV as "FileValidator / ZipHandler"
+    participant MC as "MainViewController"
+    participant BP as "BatchProcessor"
+    participant VS as "VectorizationService"
+    participant CLI as "Potrace CLI"
+    participant PP as "PreviewPane"
 
-    User->>EH: 1. ลากรูปภาพหรือไฟล์ ZIP เข้ามาวาง (Drag & Drop)
-    EH->>EH: เข้าสู่เมธอดแรก handleDrop(files, ...)
+    User->>EH: 1. ลากรูปภาพหรือไฟล์ ZIP เข้ามาวาง (Drag and Drop)
+    EH->>EH: เข้าสู่เมธอดแรก handleDrop
     EH->>FV: 2. ตรวจสอบความถูกต้อง / แตกไฟล์ ZIP (ป้องกัน ZIP Slip)
-    FV-->>EH: ส่งคืนรายการไฟล์ (List<File>) ที่ถูกต้อง
+    FV-->>EH: ส่งคืนรายการไฟล์ที่ถูกต้อง
     EH->>MC: 3. เรียกใช้ loadImages(validFiles)
-    MC->>MC: เพิ่มเลขเวอร์ชัน AtomicLong (generation.incrementAndGet)
-    MC->>BP: 4. ส่งไปประมวลผลล่วงหน้าแบบขนาน preprocessAsync(...)
-    BP-->>MC: รายงานผลลัพธ์ (ขนาดรูปภาพ และจำนวนสี)
-    MC->>PP: 5. แสดงภาพต้นฉบับทางซ้าย พร้อมแสดงไอคอน Loading
-    MC->>MC: 6. หน่วงเวลา 300ms (Debounce) scheduleDebouncedConversion()
-    MC->>VS: 7. สั่งแปลงภาพเวกเตอร์เบื้องหลัง convertAsync(item, settings)
-    rect rgb(240, 248, 255)
-        note over VS: ขั้นตอนอัลกอริทึมการแปลงเวกเตอร์ (K-Means + ตรวจจับพื้นหลัง)
-        VS->>VS: A. จัดกลุ่มสีด้วย K-Means (สูงสุด 16 สี)
-        VS->>VS: B. ตรวจจับและลบพื้นหลังไล่เฉดสี detectBackgroundLayers()
-        VS->>VS: C. สร้างหน้ากากโมโนโครม writeMaskPnm()
-        VS->>CLI: D. เรียก Potrace CLI ผ่าน ProcessBuilder
-        CLI-->>VS: ส่งคืนไฟล์ SVG ของแต่ละเลเยอร์
-        VS->>VS: E. รวมแท็ก <g> ของทุกเลเยอร์เข้าเป็นไฟล์ SVG เดียว
-    end
-    VS-->>MC: 8. ส่งคืนเส้นทางไฟล์ SVG ที่สร้างเสร็จสมบูรณ์
-    MC->>MC: 9. บันทึกผลลัพธ์ลงแคช (ImageItem Caching)
-    MC->>PP: 10. WebView เรนเดอร์ภาพเวกเตอร์ และปิดแอนิเมชัน Loading
+    MC->>MC: เพิ่มเลขเวอร์ชัน (generation.incrementAndGet)
+    MC->>BP: 4. ส่งไปประมวลผลล่วงหน้าแบบขนาน preprocessAsync
+    BP-->>MC: รายงานผลลัพธ์ (ขนาดรูปภาพและจำนวนสี)
+    MC->>PP: 5. แสดงภาพต้นฉบับทางซ้าย พร้อมไอคอน Loading
+    MC->>MC: 6. หน่วงเวลา 300ms (Debounce)
+    MC->>VS: 7. สั่งแปลงภาพเวกเตอร์เบื้องหลัง convertAsync
+    Note over VS: ขั้นตอนอัลกอริทึมการแปลงเวกเตอร์
+    VS->>VS: A. จัดกลุ่มสีด้วย K-Means
+    VS->>VS: B. ตรวจจับและลบพื้นหลังไล่เฉดสี
+    VS->>VS: C. สร้างหน้ากากโมโนโครม PPM
+    VS->>CLI: D. เรียก Potrace CLI ผ่าน ProcessBuilder
+    CLI-->>VS: ส่งคืนไฟล์ SVG ของแต่ละเลเยอร์
+    VS->>VS: E. รวมเส้นพาธของทุกเลเยอร์เป็น SVG เดียว
+    VS-->>MC: 8. ส่งคืนเส้นทางไฟล์ SVG ที่สร้างเสร็จ
+    MC->>MC: 9. บันทึกผลลัพธ์ลงแคช
+    MC->>PP: 10. WebView เรนเดอร์ภาพเวกเตอร์ และปิด Loading
 ```
 
 ---
