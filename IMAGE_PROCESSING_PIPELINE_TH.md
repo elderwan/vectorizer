@@ -45,69 +45,81 @@ sequenceDiagram
 
 ## 2. ลำดับขั้นตอนการทำงานของโค้ดอย่างละเอียด (Step-by-Step Code Walkthrough)
 
-### ขั้นตอนที่ 1: การดักจับเหตุการณ์ลากวางและจุดเข้าแรกสุด (Drag & Drop Entry Point)
-* **เมธอดแรกสุดที่โปรแกรมเริ่มทำงาน**: เมธอด `handleDrop()` ในคลาส [`AllEventHandlers.java`](file:///d:/workspace/idea/CMU/Adwance%20program/term%20project%201/src/main/java/se233/vectorizer/controller/AllEventHandlers.java)
-* **โค้ดที่ทำงาน**:
+### ขั้นตอนที่ 1: การดักจับเหตุการณ์ลากวางบนเลเยอร์ UI (View Layer Event Capture)
+* **เมื่อผู้ใช้ลากไฟล์มาวาง เมธอดแรกสุดที่จะถูกทริกเกอร์บน UI**:
+  * **กรณีที่ยังไม่มีการโหลดภาพ (หน้าจอเริ่มต้น)**: Event Listener `setOnDragDropped` ในบรรทัดที่ 52 ของ [`DropZonePane.java`](file:///d:/workspace/idea/CMU/Adwance%20program/term%20project%201/src/main/java/se233/vectorizer/view/DropZonePane.java#L52-L61):
+    ```java
+    setOnDragDropped(event -> {
+        Dragboard board = event.getDragboard();
+        boolean accepted = board.hasFiles();
+        if (accepted) {
+            filesConsumer.accept(board.getFiles()); // ส่งต่อรายการไฟล์ไปยัง Consumer Callback
+        }
+        event.setDropCompleted(accepted);
+        event.consume();
+    });
+    ```
+  * **กรณีที่อยู่ในหน้าจอแก้ไขรูปภาพแล้ว**: Event Filter ในบรรทัดที่ 73 ของ [`MainView.java`](file:///d:/workspace/idea/CMU/Adwance%20program/term%20project%201/src/main/java/se233/vectorizer/view/MainView.java#L73-L82):
+    ```java
+    editorPane.addEventFilter(javafx.scene.input.DragEvent.DRAG_DROPPED, event -> {
+        Dragboard board = event.getDragboard();
+        if (board.hasFiles() && onFilesAccepted != null) {
+            onFilesAccepted.accept(board.getFiles());
+        }
+        event.setDropCompleted(true);
+        event.consume();
+    });
+    ```
+
+---
+
+### ขั้นตอนที่ 2: การเชื่อมต่อ Event สู่ Controller (Wiring to Controller)
+* **ตำแหน่งผูกอีเวนต์**: บรรทัดที่ 22 ของ [`AllEventHandlers.java`](file:///d:/workspace/idea/CMU/Adwance%20program/term%20project%201/src/main/java/se233/vectorizer/controller/AllEventHandlers.java#L21-L25):
   ```java
-  // 1. ตรวจสอบขณะที่ผู้ใช้ลากไฟล์มาวางเหนือหน้าต่างโปรแกรม
-  target.setOnDragOver(event -> {
-      if (event.getDragboard().hasFiles()) {
-          event.acceptTransferModes(TransferMode.COPY);
-      }
-      event.consume();
-  });
-
-  // 2. เมื่อผู้ใช้ปล่อยเมาส์: เมธอดแรกสุดที่จะถูกเรียกทำงาน
-  target.setOnDragDropped(event -> {
-      Dragboard dragboard = event.getDragboard();
-      if (dragboard.hasFiles()) {
-          handleDrop(dragboard.getFiles(), stage, controller, view);
-          event.setDropCompleted(true);
-      }
-      event.consume();
-  });
+  public static void install(MainViewController controller, MainView view) {
+      view.setOnFilesAccepted(files -> controller.loadFiles(files)); // ส่งรายการไฟล์จาก View ตรงสู่ Controller
+      installNavigationHandlers(controller, view);
+      installActionHandlers(controller, view);
+  }
   ```
-* **คำอธิบาย**: JavaFX จะรับรายการไฟล์จากระบบปฏิบัติการผ่าน `Dragboard` และส่งต่อไปยังเมธอด `handleDrop()`
+* **จุดเข้าสู่ฟังก์ชันการทำงานจริงใน Controller (Controller Entry Point)**:
+  👉 เมธอด **`public void loadFiles(List<File> files)`** ในบรรทัดที่ 93 ของ [`MainViewController.java`](file:///d:/workspace/idea/CMU/Adwance%20program/term%20project%201/src/main/java/se233/vectorizer/controller/MainViewController.java#L93-L131)
 
 ---
 
-### ขั้นตอนที่ 2: การตรวจสอบไฟล์และความปลอดภัย (File Validation & ZIP Slip Defense)
-* **คลาสที่เกี่ยวข้อง**: [`AllEventHandlers.java`](file:///d:/workspace/idea/CMU/Adwance%20program/term%20project%201/src/main/java/se233/vectorizer/controller/AllEventHandlers.java), [`FileValidator.java`](file:///d:/workspace/idea/CMU/Adwance%20program/term%20project%201/src/main/java/se233/vectorizer/util/FileValidator.java), [`ZipHandler.java`](file:///d:/workspace/idea/CMU/Adwance%20program/term%20project%201/src/main/java/se233/vectorizer/util/ZipHandler.java)
-* **ลำดับการทำงาน**:
-  1. `handleDrop` จะเรียก `FileValidator.containsZip(rawFiles)` เพื่อตรวจสอบว่ามีไฟล์ `.zip` หรือไม่
-  2. หากเป็นไฟล์ `.zip`: โปรแกรมจะเรียก `ZipHandler.extractImages(zipFile, tempDir)` เพื่อแตกไฟล์รูปภาพภายใน โดยมีระบบ **ป้องกันการโจมตีแบบ ZIP Slip** (ตรวจสอบว่าพาธปลายทางต้องขึ้นต้นด้วยโฟลเดอร์ชั่วคราว ป้องกันการใช้พาธ `../../` เพื่อเขียนทับไฟล์ระบบสำคัญ)
-  3. หากเป็นไฟล์ภาพทั่วไป: โปรแกรมจะเรียก `FileValidator.filterValidImages(rawFiles)` เพื่อคัดกรองเฉพาะนามสกุลที่รองรับ (`.png`, `.jpg`, `.jpeg`, `.bmp`, `.pnm`) และตรวจสอบว่าไฟล์สามารถอ่านได้จริง มีขนาดความกว้างและความสูงมากกว่า 0
-  4. เมื่อตรวจสอบผ่านแล้ว จะส่งรายการไฟล์ไปยัง Controller ผ่านคำสั่ง: `controller.loadImages(validFiles)`
+### ขั้นตอนที่ 3: การคัดกรองไฟล์, แตกไฟล์ ZIP และการประมวลผลแบบขนาน (Validation & Preprocessing)
+* **คลาสที่เกี่ยวข้อง**: [`MainViewController.java`](file:///d:/workspace/idea/CMU/Adwance%20program/term%20project%201/src/main/java/se233/vectorizer/controller/MainViewController.java), [`FileValidator.java`](file:///d:/workspace/idea/CMU/Adwance%20program/term%20project%201/src/main/java/se233/vectorizer/util/FileValidator.java), [`ZipHandler.java`](file:///d:/workspace/idea/CMU/Adwance%20program/term%20project%201/src/main/java/se233/vectorizer/util/ZipHandler.java), [`BatchProcessor.java`](file:///d:/workspace/idea/CMU/Adwance%20program/term%20project%201/src/main/java/se233/vectorizer/controller/BatchProcessor.java)
+* **ลำดับขั้นตอนการทำงาน**:
+  1. ในเมธอด `loadFiles` บรรทัดที่ 97 จะเรียกเมธอดส่วนตัว `resolveImageFiles(files)` (บรรทัดที่ 484):
+     * หากเป็นไฟล์ `.zip`: เรียก `ZipHandler.extractImages(files.get(0))` แตกไฟล์ภาพ พร้อมระบบ **ป้องกันช่องโหว่ ZIP Slip** (ตรวจสอบพาธว่าต้องอยู่ใต้โฟลเดอร์ชั่วคราว ป้องกันการใช้ `../../` เขียนทับไฟล์ระบบ)
+     * หากเป็นไฟล์ภาพทั่วไป: เรียก `FileValidator.isSupportedImage(file)` อนุญาตเฉพาะภาพ `.jpg / .png` ที่อ่านได้จริง
+  2. สร้างอ็อบเจกต์ข้อมูล `ImageItem`: `ImageItem item = new ImageItem(file);`
+  3. บรรทัดที่ 124~126:
+     * `mainView.showEditor()`: สลับหน้าจอจากกล่องลากไฟล์เป็นหน้าจอ Editor หลัก
+     * `refreshPreview()`: รีเฟรชแสดงภาพต้นฉบับทางฝั่งซ้าย
+     * `startInitialPreprocessing(loadedItems)`: ส่งงานวิเคราะห์เข้าสู่ ThreadPool เบื้องหลัง
+  4. **การประมวลผลล่วงหน้าแบบขนาน (`BatchProcessor.preprocessAsync`)**:
+     * ใช้ `ExecutorService` ตามจำนวนแกนประมวลผลของ CPU รันการวิเคราะห์ขนาดภาพและนับจำนวนสีด้วย `ColorAnalyzer.countDistinctColors` และอัปเดตความคืบหน้าบน UI ด้วย `Platform.runLater()`
 
 ---
 
-### ขั้นตอนที่ 3: การรีเซ็ตสถานะและการประมวลผลแบบขนาน (Controller & Multithreaded Preprocessing)
-* **คลาสที่เกี่ยวข้อง**: [`MainViewController.java`](file:///d:/workspace/idea/CMU/Adwance%20program/term%20project%201/src/main/java/se233/vectorizer/controller/MainViewController.java), [`BatchProcessor.java`](file:///d:/workspace/idea/CMU/Adwance%20program/term%20project%201/src/main/java/se233/vectorizer/controller/BatchProcessor.java)
-* **เมธอดหลัก**: `controller.loadImages(List<File> files)`
-* **สาระสำคัญของโค้ด**:
-  1. **การป้องกัน Race Condition**:
-     * เรียกใช้ `cancelDebounce()` เพื่อยกเลิกงานที่กำลังนับถอยหลังอยู่เดิม
-     * เรียกใช้ `generation.incrementAndGet()` โดยใช้ `AtomicLong` เพื่อเพิ่มหมายเลขเวอร์ชันของงาน หากมีงานเก่าจากเธรดเบื้องหลังที่เพิ่งเสร็จ ระบบจะตรวจสอบเลขเวอร์ชันและทิ้งผลลัพธ์นั้นทันที ป้องกันข้อมูลตีกัน
-  2. **การแปลงข้อมูลเป็นโมเดล**: แปลง `File` แต่ละรายการให้อยู่ในรูปอ็อบเจกต์ `ImageItem`
-  3. **การประมวลผลล่วงหน้าแบบขนาน (`batchProcessor.preprocessAsync`)**:
-     * ใช้ `ExecutorService` (ThreadPool) ที่ปรับขนาดตามจำนวนแกนประมวลผล (CPU Cores)
-     * แต่ละไฟล์ถูกห่อหุ้มเป็น `PreprocessSingleTask` (ทำงานเป็น `Callable<PreprocessedItem>`) เพื่ออ่านขนาดภาพ และวิเคราะห์จำนวนสีด้วย `ColorAnalyzer.countDistinctColors`
-     * ใช้ `ExecutorCompletionService` เพื่อให้รูปภาพที่วิเคราะห์เสร็จก่อนสามารถอัปเดตความคืบหน้าบน UI ผ่าน `Platform.runLater()` ได้ทันที
-  4. เมื่อรูปแรกพร้อม จะเรียกคำสั่ง `showItem(0)` เพื่อนำภาพแรกขึ้นแสดง
-
----
-
-### ขั้นตอนที่ 4: การแสดงภาพต้นฉบับและการหน่วงเวลา (Debounce & UI Setup)
-* **คลาสที่เกี่ยวข้อง**: [`MainViewController.java`](file:///d:/workspace/idea/CMU/Adwance%20program/term%20project%201/src/main/java/se233/vectorizer/controller/MainViewController.java), [`PreviewPane.java`](file:///d:/workspace/idea/CMU/Adwance%20program/term%20project%201/src/main/java/se233/vectorizer/view/PreviewPane.java)
-* **เมธอดหลัก**: `showItem(int index)` -> `scheduleDebouncedConversion()`
-* **ลำดับการทำงาน**:
-  1. `previewPane.displayOriginal(image)`: โหลดและแสดงภาพต้นฉบับทางฝั่งซ้ายของหน้าจอทันที
-  2. **ระบบตรวจสอบแคช (Cache Hit)**:
-     * เรียกคำสั่ง `currentItem.getCachedSvg(currentSettings)` หากภาพนี้ภายใต้การตั้งค่าเดิมเคยถูกแปลงแล้ว ระบบจะดึงผลลัพธ์เวกเตอร์มาแสดงทันทีโดย **ไม่ต้องคำนวณซ้ำ**
-  3. **กรณีที่ไม่มีในแคช (Cache Miss)**:
-     * `previewPane.showLoading()`: เปิดไอคอนวงล้อหมุนแสดงสถานะกำลังโหลด
-     * `scheduleDebouncedConversion()`: ใช้ `ScheduledExecutorService` หน่วงเวลาไว้ **300 มิลลิวินาที (Debounce)**
-     * **หลักการของ Debounce**: เพื่อป้องกันกรณีที่ผู้ใช้เลื่อนสไลเดอร์ปรับค่าสีไปมาอย่างรวดเร็ว ระบบจะรอให้ผู้ใช้หยุดเลื่อนเป็นเวลา 300ms ก่อน จึงจะส่งงานไปแปลงภาพจริง ช่วยประหยัดทรัพยากรเครื่องอย่างมาก
+### ขั้นตอนที่ 4: การหน่วงเวลา Debounce และการตรวจจับแคช (Debounce Scheduling & Cache Hit)
+* **คลาสที่เกี่ยวข้อง**: [`MainViewController.java`](file:///d:/workspace/idea/CMU/Adwance%20program/term%20project%201/src/main/java/se233/vectorizer/controller/MainViewController.java#L275-L335)
+* **เมธอดหลัก**: `schedulePreviewConversion()` -> `startPreviewConversion(generation)`
+* **หลักการของโค้ด**:
+  1. **การนับถอยหลัง Debounce 300ms**:
+     * เรียกคำสั่ง `previewScheduler.schedule(..., 300, TimeUnit.MILLISECONDS)`
+     * หากผู้ใช้เปลี่ยนค่าหรือสลับภาพก่อนครบ 300ms งานเดิมจะถูกยกเลิกทันที (`pendingPreview.cancel(false)`) ป้องกันการคำนวณซ้ำซ้อน
+  2. **ระบบตรวจจับแคช (Cache Hit)**:
+     * เมื่อครบ 300ms จะเข้าสู่ `startPreviewConversion` และตรวจสอบ `item.getCachedSvg(settings)` ก่อนเสมอ
+     * หากภาพนี้ภายใต้การตั้งค่าเดิมเคยแปลงไว้แล้ว ระบบจะดึงพาธไฟล์ SVG เดิมมาแสดงทันทีโดย **ไม่ต้องแปลงใหม่**
+  3. **กรณีที่ไม่มีในแคช**:
+     * เปิดไอคอนวงล้อหมุน `mainView.getPreviewPane().setBusy(true)`
+     * ส่งงาน `Task<Void>` เข้าสู่ `previewExecutor` เธรดพูลเบื้องหลัง เพื่อสั่งแปลงภาพเวกเตอร์:
+       ```java
+       Path svg = vectorizationService.convertAsync(item, settings).join();
+       item.setVectorizedPath(svg);
+       ```
 
 ---
 

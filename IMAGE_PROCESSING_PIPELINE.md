@@ -45,70 +45,81 @@ sequenceDiagram
 
 ## 二、 详细代码执行链路逐级剖析 (Step-by-Step Code Walkthrough)
 
-### 阶段 1：拖拽事件捕获与最初入口
-* **首先进入的方法**：[`AllEventHandlers.java`](file:///d:/workspace/idea/CMU/Adwance%20program/term%20project%201/src/main/java/se233/vectorizer/controller/AllEventHandlers.java) 中的 `handleDrop()` 方法。
-* **具体执行代码**：
+### 阶段 1：拖拽事件捕获与视图层转发 (View Layer Event Capture)
+* **用户拖拽松手时，首先触发的 UI 方法**：
+  * **当处于初始无图界面时**：[`DropZonePane.java`](file:///d:/workspace/idea/CMU/Adwance%20program/term%20project%201/src/main/java/se233/vectorizer/view/DropZonePane.java#L52-L61) 第 52 行的 `setOnDragDropped` 事件监听器：
+    ```java
+    setOnDragDropped(event -> {
+        Dragboard board = event.getDragboard();
+        boolean accepted = board.hasFiles();
+        if (accepted) {
+            filesConsumer.accept(board.getFiles()); // 触发回调转发文件列表
+        }
+        event.setDropCompleted(accepted);
+        event.consume();
+    });
+    ```
+  * **当处于已加载图片的编辑界面时**：[`MainView.java`](file:///d:/workspace/idea/CMU/Adwance%20program/term%20project%201/src/main/java/se233/vectorizer/view/MainView.java#L73-L82) 第 73 行的 `editorPane` 拖拽事件过滤器：
+    ```java
+    editorPane.addEventFilter(javafx.scene.input.DragEvent.DRAG_DROPPED, event -> {
+        Dragboard board = event.getDragboard();
+        if (board.hasFiles() && onFilesAccepted != null) {
+            onFilesAccepted.accept(board.getFiles());
+        }
+        event.setDropCompleted(true);
+        event.consume();
+    });
+    ```
+
+---
+
+### 阶段 2：事件总线连接与控制器业务入口 (Wiring to Controller)
+* **事件绑定位置**：[`AllEventHandlers.java`](file:///d:/workspace/idea/CMU/Adwance%20program/term%20project%201/src/main/java/se233/vectorizer/controller/AllEventHandlers.java#L21-L25) 第 22 行：
   ```java
-  // 1. 拖拽悬停检测
-  target.setOnDragOver(event -> {
-      if (event.getDragboard().hasFiles()) {
-          event.acceptTransferModes(TransferMode.COPY);
-      }
-      event.consume();
-  });
-
-  // 2. 鼠标松开，文件落下：程序最先被触发的业务方法
-  target.setOnDragDropped(event -> {
-      Dragboard dragboard = event.getDragboard();
-      if (dragboard.hasFiles()) {
-          handleDrop(dragboard.getFiles(), stage, controller, view);
-          event.setDropCompleted(true);
-      }
-      event.consume();
-  });
+  public static void install(MainViewController controller, MainView view) {
+      view.setOnFilesAccepted(files -> controller.loadFiles(files)); // 将视图拖拽事件接入控制器
+      installNavigationHandlers(controller, view);
+      installActionHandlers(controller, view);
+  }
   ```
-* **解释要点**：
-  * JavaFX 通过 `Dragboard` 获取操作系统传递的文件句柄列表。
+* **控制器的真正业务入口方法**：
+  👉 [`MainViewController.java`](file:///d:/workspace/idea/CMU/Adwance%20program/term%20project%201/src/main/java/se233/vectorizer/controller/MainViewController.java#L93-L131) 第 93 行的 **`public void loadFiles(List<File> files)`**！
 
 ---
 
-### 阶段 2：文件类型识别与安全校验 (Validation & Unpacking)
-* **涉及类**：[`AllEventHandlers.java`](file:///d:/workspace/idea/CMU/Adwance%20program/term%20project%201/src/main/java/se233/vectorizer/controller/AllEventHandlers.java), [`FileValidator.java`](file:///d:/workspace/idea/CMU/Adwance%20program/term%20project%201/src/main/java/se233/vectorizer/util/FileValidator.java), [`ZipHandler.java`](file:///d:/workspace/idea/CMU/Adwance%20program/term%20project%201/src/main/java/se233/vectorizer/util/ZipHandler.java)
-* **执行逻辑**：
-  1. `handleDrop` 首先调用 `FileValidator.containsZip(rawFiles)` 判断是否为压缩包。
-  2. 若包含 `.zip`：调用 `ZipHandler.extractImages(zipFile, tempDir)` 解压内部的图片。此处具备 **ZIP Slip 路径穿越攻击防御**（校验解压目标路径必须以临时目录开头，防止越界覆盖系统关键文件）。
-  3. 若为普通图片：调用 `FileValidator.filterValidImages(rawFiles)`，过滤出支持的扩展名（`.png`, `.jpg`, `.jpeg`, `.bmp`, `.pnm`），并验证文件真实可读且长宽大于 0。
-  4. 校验通过后，调用控制器的入口：`controller.loadImages(validFiles)`。
+### 阶段 3：文件识别、安全解压与并发预处理 (Validation, ZIP Slip & Preprocessing)
+* **涉及类**：[`MainViewController.java`](file:///d:/workspace/idea/CMU/Adwance%20program/term%20project%201/src/main/java/se233/vectorizer/controller/MainViewController.java), [`FileValidator.java`](file:///d:/workspace/idea/CMU/Adwance%20program/term%20project%201/src/main/java/se233/vectorizer/util/FileValidator.java), [`ZipHandler.java`](file:///d:/workspace/idea/CMU/Adwance%20program/term%20project%201/src/main/java/se233/vectorizer/util/ZipHandler.java), [`BatchProcessor.java`](file:///d:/workspace/idea/CMU/Adwance%20program/term%20project%201/src/main/java/se233/vectorizer/controller/BatchProcessor.java)
+* **执行步骤**：
+  1. `loadFiles` 第 97 行首先调用内部私有方法 `resolveImageFiles(files)`（第 484 行）：
+     * 若为单 `.zip` 文件：调用 `ZipHandler.extractImages(files.get(0))` 解压，内含 **ZIP Slip 漏洞安全防御**（校验解压目标路径必须位于系统安全临时目录内，阻断 `../../` 恶意路径逃逸）。
+     * 若为普通图片：调用 `FileValidator.isSupportedImage(file)`，仅允许合法且可读取的 `.jpg / .png` 图片通过。
+  2. 遍历校验通过的图片，去重后实例化为 `ImageItem` 数据对象：`ImageItem item = new ImageItem(file);`。
+  3. 第 124~126 行：
+     * `mainView.showEditor()`：界面从初始拖拽框切换为主编辑工作台。
+     * `refreshPreview()`：刷新左侧原图显示。
+     * `startInitialPreprocessing(loadedItems)`：向后台提交并发分析任务。
+  4. **并发线程池分析 (`BatchProcessor.preprocessAsync`)**：
+     * 利用 `ExecutorService` 线程池（按照机器 CPU 核心数调度），并发分析每张图片的像素尺寸以及调用 `ColorAnalyzer.countDistinctColors` 快速采样统计颜色数，并通过 `Platform.runLater()` 平滑更新底部进度条。
 
 ---
 
-### 阶段 3：控制器状态重置与并发预处理 (Controller & Multithreading)
-* **涉及类**：[`MainViewController.java`](file:///d:/workspace/idea/CMU/Adwance%20program/term%20project%201/src/main/java/se233/vectorizer/controller/MainViewController.java), [`BatchProcessor.java`](file:///d:/workspace/idea/CMU/Adwance%20program/term%20project%201/src/main/java/se233/vectorizer/controller/BatchProcessor.java)
-* **执行方法**：`controller.loadImages(List<File> files)`
+### 阶段 4：防抖调度与缓存检测 (Debounce Scheduling & Cache Hit)
+* **涉及类**：[`MainViewController.java`](file:///d:/workspace/idea/CMU/Adwance%20program/term%20project%201/src/main/java/se233/vectorizer/controller/MainViewController.java#L275-L335)
+* **执行方法**：`schedulePreviewConversion()` -> `startPreviewConversion(generation)`
 * **核心代码逻辑**：
-  1. **防抖重置与多线程竞态防御**：
-     * 调用 `cancelDebounce()` 取消当前正在倒计时的任务。
-     * 调用 `generation.incrementAndGet()`：使用原子类 `AtomicLong` 递增生成代数。任何过期的旧后台任务在回调时由于代数不匹配会被自动丢弃，杜绝多线程数据冲突。
-  2. **数据模型封装**：将每个 `File` 包装为独立的 `ImageItem` 模型对象，加入 `List<ImageItem>`。
-  3. **并发预处理 (`batchProcessor.preprocessAsync`)**：
-     * 使用 `ExecutorService` 线程池（按照当前机器 CPU 核心数自动调配并行工作线程）。
-     * 每个图片包装为一个 `PreprocessSingleTask` 任务（实现 `Callable<PreprocessedItem>`）：在后台读取宽高，并通过 `ColorAnalyzer.countDistinctColors` 进行像素采样快速分析颜色数。
-     * 配合 `ExecutorCompletionService` 实现“完成一张通知一张”，通过 `Platform.runLater()` 平滑更新进度条。
-  4. 完成后，调用 `showItem(0)` 展示第一张图片。
-
----
-
-### 阶段 4：界面就绪与防抖延时调度 (Debounce & UI Setup)
-* **涉及类**：[`MainViewController.java`](file:///d:/workspace/idea/CMU/Adwance%20program/term%20project%201/src/main/java/se233/vectorizer/controller/MainViewController.java), [`PreviewPane.java`](file:///d:/workspace/idea/CMU/Adwance%20program/term%20project%201/src/main/java/se233/vectorizer/view/PreviewPane.java)
-* **执行方法**：`showItem(int index)` -> `scheduleDebouncedConversion()`
-* **核心代码逻辑**：
-  1. `previewPane.displayOriginal(image)`：立即在左侧面板加载并显示原始图片位图。
-  2. **缓存命中检测 (Cache Hit)**：
-     * 调用 `currentItem.getCachedSvg(currentSettings)`。如果该图片在当前相同的转换参数下之前已经计算过，**直接从缓存取用并渲染，无需重新运算**！
+  1. **300ms 防抖倒计时**：
+     * 调用 `previewScheduler.schedule(..., 300, TimeUnit.MILLISECONDS)`。
+     * 若用户在 300ms 内再次改动颜色或切换图片，旧任务会被直接取消（`pendingPreview.cancel(false)`），杜绝频繁请求卡顿。
+  2. **缓存快速命中 (Cache Hit)**：
+     * 当倒计时结束进入 `startPreviewConversion` 时，首先检查 `item.getCachedSvg(settings)`。
+     * 若该图片在当前相同设置下之前已转换过，直接取用缓存路径，**零延迟跳过重新运算**！
   3. **未命中缓存时**：
-     * `previewPane.showLoading()`：右侧调出无百分比的轻量旋转 Loading 动画。
-     * `scheduleDebouncedConversion()`：使用 `ScheduledExecutorService` 启动一个 **300 毫秒的延时倒计时**。
-     * **防抖原理**：用户可能连续拖入多张图或快速滑动颜色滑块，只有在用户停止操作 300ms 后才真正向后台提交耗时计算，极大节约系统资源。
+     * 调用 `mainView.getPreviewPane().setBusy(true)` 展示转圈加载指示器。
+     * 包装后台 JavaFX `Task<Void>` 提交至 `previewExecutor` 线程池，调用底层算法服务：
+       ```java
+       Path svg = vectorizationService.convertAsync(item, settings).join();
+       item.setVectorizedPath(svg);
+       ```
 
 ---
 

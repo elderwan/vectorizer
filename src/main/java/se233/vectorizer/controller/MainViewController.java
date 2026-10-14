@@ -480,7 +480,7 @@ public class MainViewController {
         thread.setDaemon(true);
         return thread;
     }
-    
+
     private List<File> resolveImageFiles(List<File> files) throws IOException {
         // Accept multiple images or one ZIP, but never a mixture of both.
         if (files == null || files.isEmpty()) {
