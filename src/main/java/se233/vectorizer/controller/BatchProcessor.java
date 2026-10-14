@@ -124,6 +124,7 @@ public class BatchProcessor {
             Files.createDirectories(outputDirectory);
             List<String> outputNames = createOutputNames(items, settings);
             CompletionService<Path> completionService = new ExecutorCompletionService<>(executor);
+            //export tasks
             submitExportTasks(items, settings, outputDirectory, outputNames, completionService);
             collectExportResults(items.size(), completionService, successes, failures, progressListener);
         } catch (IOException exception) {
@@ -172,6 +173,7 @@ public class BatchProcessor {
             this.outputName = outputName;
         }
 
+        //the file single task will call the convertAsync method of the vectorizationService to generate a temporary SVG file for the image item, and then copy that temporary SVG file to the output directory with the specified output name. The method returns the path to the final destination SVG file.
         @Override
         public Path call() throws Exception {
             Path temporarySvg = vectorizationService.convertAsync(item, settings).join();
