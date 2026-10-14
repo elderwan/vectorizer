@@ -268,6 +268,7 @@ public class BatchProcessor {
         try {
             CompletionService<PreprocessedItem> completionService =
                     new ExecutorCompletionService<>(executor);
+            //handle each image item in the batch concurrently, and collect the results as they complete
             submitPreprocessTasks(items, completionService);
             collectPreprocessResults(items.size(), completionService, successes, failures, progressListener, itemListener);
         } finally {
@@ -280,6 +281,7 @@ public class BatchProcessor {
             List<ImageItem> items,
             CompletionService<PreprocessedItem> completionService) {
         for (ImageItem item : items) {
+            //the new PreprocessSingleTask(item) is a Callable that will preprocess the image item and return a PreprocessedItem
             completionService.submit(new PreprocessSingleTask(item));
         }
     }
@@ -303,6 +305,7 @@ public class BatchProcessor {
             throw new IOException("Input image is corrupted: " + item.getFile().getName());
         }
         int colorCount = ColorAnalyzer.detectColorCount(image);
+        //run the convertAsync method of the vectorizationService to generate a preview SVG for the image item, and wait for it to complete using join()
         Path svg = vectorizationService.convertAsync(item, item.getSettings()).join();
         return new PreprocessedItem(item, svg, colorCount);
     }

@@ -118,6 +118,7 @@ public class VectorizationService {
         }
         return CompletableFuture.supplyAsync(() -> {
             try {
+                //the real convert method is called here, and the result is returned to the future
                 return convert(item, settings);
             } catch (IOException | RuntimeException exception) {
                 throw new CompletionException(exception);
@@ -135,6 +136,7 @@ public class VectorizationService {
                     ? settings.getCustomColors() : MAX_UNLIMITED_COLORS;
             boolean preservePalette =
                     settings.getColorMode() == ConversionSettings.ColorMode.UNLIMITED;
+            //the convertColorLayers run the potrace command for each color layer and merge the results into a single svg
             convertColorLayers(image, settings, directory, output, colorLimit,
                     preservePalette);
             LOGGER.info("Vectorization finished: {}", output);

@@ -123,6 +123,7 @@ public class MainViewController {
             prepareInitialSettings(loadedItems);
             mainView.showEditor();
             refreshPreview();
+            //load the images
             startInitialPreprocessing(loadedItems);
         } catch (IOException | RuntimeException exception) {
             LOGGER.error("Unable to load selected files", exception);
@@ -340,7 +341,7 @@ public class MainViewController {
         mainView.getProgressBar().setProgress(0);
         mainView.getStatusLabel().setText("Preparing previews...");
         mainView.getPreviewPane().setBusy(true);
-
+        // Start asynchronous preprocessing of all loaded images, updating progress and handling results on the JavaFX thread.
         batchProcessor.preprocessAsync(itemsToProcess,
                 progress -> Platform.runLater(() -> updatePreprocessProgress(generation, progress)),
                 prepared -> Platform.runLater(() -> handleItemPreprocessed(generation, prepared))
