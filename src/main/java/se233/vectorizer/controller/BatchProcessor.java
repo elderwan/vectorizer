@@ -115,43 +115,17 @@ public class BatchProcessor {
             ConversionSettings settings,
             Path outputDirectory,
             Consumer<BatchProgress> progressListener) {
-        // Submit conversion tasks, collect each completed result, and report progress.
         boolean parallel = shouldProcessInParallel(items, settings);
         LOGGER.info("Batch size: {}, parallel: {}", items.size(), parallel);
         List<Path> successes = new ArrayList<>();
         List<BatchFailure> failures = new ArrayList<>();
-        ExecutorService executor = parallel
-                ? Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors())
-                : Executors.newSingleThreadExecutor();
+        ExecutorService executor = createBatchExecutor(parallel);
         try {
             Files.createDirectories(outputDirectory);
             List<String> outputNames = createOutputNames(items, settings);
             CompletionService<Path> completionService = new ExecutorCompletionService<>(executor);
-            for (int index = 0; index < items.size(); index++) {
-                ImageItem item = items.get(index);
-                String outputName = outputNames.get(index);
-                Callable<Path> task = () -> {
-                    Path temporarySvg = vectorizationService.convertAsync(item, settings).join();
-                    Path destination = outputDirectory.resolve(outputName);
-                    Files.copy(temporarySvg, destination, StandardCopyOption.REPLACE_EXISTING);
-                    return destination;
-                };
-                completionService.submit(task);
-            }
-            for (int completed = 1; completed <= items.size(); completed++) {
-                try {
-                    Path result = completionService.take().get();
-                    successes.add(result);
-                } catch (Exception exception) {
-                    Throwable cause = exception instanceof CompletionException && exception.getCause() != null
-                            ? exception.getCause() : exception;
-                    LOGGER.error("Batch item failed", cause);
-                    failures.add(new BatchFailure(cause.getMessage(), cause));
-                }
-                if (progressListener != null) {
-                    progressListener.accept(new BatchProgress(completed, items.size()));
-                }
-            }
+            submitExportTasks(items, settings, outputDirectory, outputNames, completionService);
+            collectExportResults(items.size(), completionService, successes, failures, progressListener);
         } catch (IOException exception) {
             LOGGER.error("Unable to prepare batch output directory", exception);
             for (ImageItem item : items) {
@@ -163,15 +137,83 @@ public class BatchProcessor {
         return new BatchResult(successes, failures, parallel);
     }
 
+    private ExecutorService createBatchExecutor(boolean parallel) {
+        if (parallel) {
+            int cores = Runtime.getRuntime().availableProcessors();
+            return Executors.newFixedThreadPool(cores);
+        } else {
+            return Executors.newSingleThreadExecutor();
+        }
+    }
+
+    private void submitExportTasks(
+            List<ImageItem> items,
+            ConversionSettings settings,
+            Path outputDirectory,
+            List<String> outputNames,
+            CompletionService<Path> completionService) {
+        for (int index = 0; index < items.size(); index++) {
+            ImageItem item = items.get(index);
+            String outputName = outputNames.get(index);
+            completionService.submit(new ExportSingleTask(item, settings, outputDirectory, outputName));
+        }
+    }
+
+    private class ExportSingleTask implements Callable<Path> {
+        private final ImageItem item;
+        private final ConversionSettings settings;
+        private final Path outputDirectory;
+        private final String outputName;
+
+        ExportSingleTask(ImageItem item, ConversionSettings settings, Path outputDirectory, String outputName) {
+            this.item = item;
+            this.settings = settings;
+            this.outputDirectory = outputDirectory;
+            this.outputName = outputName;
+        }
+
+        @Override
+        public Path call() throws Exception {
+            Path temporarySvg = vectorizationService.convertAsync(item, settings).join();
+            Path destination = outputDirectory.resolve(outputName);
+            Files.copy(temporarySvg, destination, StandardCopyOption.REPLACE_EXISTING);
+            return destination;
+        }
+    }
+
+    private void collectExportResults(
+            int totalCount,
+            CompletionService<Path> completionService,
+            List<Path> successes,
+            List<BatchFailure> failures,
+            Consumer<BatchProgress> progressListener) {
+        for (int completed = 1; completed <= totalCount; completed++) {
+            try {
+                Path result = completionService.take().get();
+                successes.add(result);
+            } catch (Exception exception) {
+                Throwable cause = unwrap(exception);
+                LOGGER.error("Batch item failed", cause);
+                failures.add(new BatchFailure(cause.getMessage(), cause));
+            }
+            if (progressListener != null) {
+                progressListener.accept(new BatchProgress(completed, totalCount));
+            }
+        }
+    }
+
     private static List<String> createOutputNames(
             List<ImageItem> items,
             ConversionSettings settings) {
         // Preserve original names or create numbered names from a custom prefix.
         ConversionSettings.NamingRule namingRule = settings.getNamingRule();
         if (namingRule == ConversionSettings.NamingRule.ORIGINAL) {
-            return items.stream()
-                    .map(item -> stripExtension(item.getFile().getName()) + ".svg")
-                    .toList();
+            List<String> names = new ArrayList<>(items.size());
+            for (ImageItem item : items) {
+                String baseName = stripExtension(item.getFile().getName());
+                names.add(baseName + ".svg");
+            }
+            return names;
         }
 
         String customBase = sanitizeCustomName(settings.getCustomName());
@@ -221,42 +263,71 @@ public class BatchProcessor {
             return new PreprocessResult(successes, failures, false);
         }
 
-        ExecutorService executor = Executors.newFixedThreadPool(
-                Math.min(Runtime.getRuntime().availableProcessors(), items.size()));
+        int maxThreads = Math.min(Runtime.getRuntime().availableProcessors(), items.size());
+        ExecutorService executor = Executors.newFixedThreadPool(maxThreads);
         try {
             CompletionService<PreprocessedItem> completionService =
                     new ExecutorCompletionService<>(executor);
-            for (ImageItem item : items) {
-                completionService.submit(() -> {
-                    BufferedImage image = ImageIO.read(item.getFile());
-                    if (image == null) {
-                        throw new IOException("Input image is corrupted: "
-                                + item.getFile().getName());
-                    }
-                    int colorCount = ColorAnalyzer.detectColorCount(image);
-                    Path svg = vectorizationService
-                            .convertAsync(item, item.getSettings()).join();
-                    return new PreprocessedItem(item, svg, colorCount);
-                });
-            }
-            for (int completed = 1; completed <= items.size(); completed++) {
-                try {
-                    PreprocessedItem result = completionService.take().get();
-                    successes.add(result);
-                    if (itemListener != null) {
-                        itemListener.accept(result);
-                    }
-                } catch (Exception exception) {
-                    Throwable cause = unwrap(exception);
-                    LOGGER.error("Preprocessing item failed", cause);
-                    failures.add(new BatchFailure(cause.getMessage(), cause));
-                }
-                notifyProgress(progressListener, completed, items.size());
-            }
+            submitPreprocessTasks(items, completionService);
+            collectPreprocessResults(items.size(), completionService, successes, failures, progressListener, itemListener);
         } finally {
             executor.shutdownNow();
         }
         return new PreprocessResult(successes, failures, items.size() > 1);
+    }
+
+    private void submitPreprocessTasks(
+            List<ImageItem> items,
+            CompletionService<PreprocessedItem> completionService) {
+        for (ImageItem item : items) {
+            completionService.submit(new PreprocessSingleTask(item));
+        }
+    }
+
+    private class PreprocessSingleTask implements Callable<PreprocessedItem> {
+        private final ImageItem item;
+
+        PreprocessSingleTask(ImageItem item) {
+            this.item = item;
+        }
+
+        @Override
+        public PreprocessedItem call() throws Exception {
+            return preprocessSingleImage(item);
+        }
+    }
+
+    private PreprocessedItem preprocessSingleImage(ImageItem item) throws IOException {
+        BufferedImage image = ImageIO.read(item.getFile());
+        if (image == null) {
+            throw new IOException("Input image is corrupted: " + item.getFile().getName());
+        }
+        int colorCount = ColorAnalyzer.detectColorCount(image);
+        Path svg = vectorizationService.convertAsync(item, item.getSettings()).join();
+        return new PreprocessedItem(item, svg, colorCount);
+    }
+
+    private void collectPreprocessResults(
+            int totalCount,
+            CompletionService<PreprocessedItem> completionService,
+            List<PreprocessedItem> successes,
+            List<BatchFailure> failures,
+            Consumer<BatchProgress> progressListener,
+            Consumer<PreprocessedItem> itemListener) {
+        for (int completed = 1; completed <= totalCount; completed++) {
+            try {
+                PreprocessedItem result = completionService.take().get();
+                successes.add(result);
+                if (itemListener != null) {
+                    itemListener.accept(result);
+                }
+            } catch (Exception exception) {
+                Throwable cause = unwrap(exception);
+                LOGGER.error("Preprocessing item failed", cause);
+                failures.add(new BatchFailure(cause.getMessage(), cause));
+            }
+            notifyProgress(progressListener, completed, totalCount);
+        }
     }
 
     private static void notifyProgress(

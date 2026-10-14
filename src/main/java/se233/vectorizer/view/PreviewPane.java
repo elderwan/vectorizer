@@ -80,7 +80,7 @@ public class PreviewPane extends BorderPane {
         }
         loadSvg(vectorizedSvg);
         zoom.set(1.0);
-        Platform.runLater(this::zoomToFit);
+        Platform.runLater(() -> zoomToFit());
     }
 
     /**

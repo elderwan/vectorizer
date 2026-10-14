@@ -19,7 +19,7 @@ public final class AllEventHandlers {
      * @param view view whose controls receive the event handlers
      */
     public static void install(MainViewController controller, MainView view) {
-        view.setOnFilesAccepted(controller::loadFiles);
+        view.setOnFilesAccepted(files -> controller.loadFiles(files));
         installNavigationHandlers(controller, view);
         installActionHandlers(controller, view);
     }
@@ -31,8 +31,8 @@ public final class AllEventHandlers {
      * @param view view containing the navigation controls
      */
     private static void installNavigationHandlers(MainViewController controller, MainView view) {
-        view.getConfigPane().setOnBack(controller::showPrevious);
-        view.getConfigPane().setOnNext(controller::showNext);
+        view.getConfigPane().setOnBack(() -> controller.showPrevious());
+        view.getConfigPane().setOnNext(() -> controller.showNext());
     }
 
     /**
@@ -42,8 +42,8 @@ public final class AllEventHandlers {
      * @param view view containing the action controls
      */
     private static void installActionHandlers(MainViewController controller, MainView view) {
-        view.getConfigPane().setOnExportAll(controller::exportAll);
-        view.getConfigPane().setOnReset(controller::resetAll);
-        view.getConfigPane().setOnSettingsChanged(controller::applySettings);
+        view.getConfigPane().setOnExportAll(() -> controller.exportAll());
+        view.getConfigPane().setOnReset(() -> controller.resetAll());
+        view.getConfigPane().setOnSettingsChanged(settings -> controller.applySettings(settings));
     }
 }

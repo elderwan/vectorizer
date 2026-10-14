@@ -25,7 +25,6 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.HashSet;
 import java.util.Set;
@@ -54,9 +53,9 @@ public class MainViewController {
     private final VectorizationService vectorizationService;
     private final BatchProcessor batchProcessor;
     private final ScheduledExecutorService previewScheduler =
-            Executors.newSingleThreadScheduledExecutor(MainViewController::daemonThread);
+            Executors.newSingleThreadScheduledExecutor(runnable -> createDaemonThread(runnable));
     private final ExecutorService previewExecutor =
-            Executors.newSingleThreadExecutor(MainViewController::daemonThread);
+            Executors.newSingleThreadExecutor(runnable -> createDaemonThread(runnable));
     private final AtomicLong previewGeneration = new AtomicLong();
     private final AtomicLong dataGeneration = new AtomicLong();
     private ScheduledFuture<?> pendingPreview;
@@ -102,7 +101,7 @@ public class MainViewController {
 
             List<ImageItem> loadedItems = new ArrayList<>();
             for (File file : imageFiles) {
-                if (imageItems.stream().anyMatch(item -> sameFile(item.getFile(), file))) {
+                if (isAlreadyLoaded(file)) {
                     LOGGER.info("Skipping already loaded image: {}", file.getName());
                     continue;
                 }
@@ -224,24 +223,31 @@ public class MainViewController {
         mainView.getStatusLabel().setText("Exporting...");
         LOGGER.info("Export started: {} image(s)", imageItems.size());
 
-        batchProcessor.processAsync(imageItems, settings, directory.toPath(), progress ->
-                Platform.runLater(() -> {
-                    mainView.getProgressBar().setProgress(
-                            (double) progress.completed() / progress.total());
-                    mainView.getStatusLabel().setText(
-                            "Exporting " + progress.completed() + "/" + progress.total());
-                })).whenComplete((result, throwable) -> Platform.runLater(() -> {
-            mainView.setProcessingVisible(false);
-            if (throwable != null) {
-                LOGGER.error("Export failed", unwrap(throwable));
-                showError(userMessage(unwrap(throwable), "The images could not be exported."));
-                return;
-            }
-            LOGGER.info("Export finished: {} succeeded, {} failed",
-                    result.successes().size(), result.failures().size());
-            showInformation("Export complete: " + result.successes().size()
-                    + " succeeded, " + result.failures().size() + " failed.");
-        }));
+        batchProcessor.processAsync(imageItems, settings, directory.toPath(), progress -> {
+            Platform.runLater(() -> updateExportProgress(progress));
+        }).whenComplete((result, throwable) -> {
+            Platform.runLater(() -> handleExportComplete(result, throwable));
+        });
+    }
+
+    private void updateExportProgress(BatchProcessor.BatchProgress progress) {
+        double ratio = (double) progress.completed() / progress.total();
+        mainView.getProgressBar().setProgress(ratio);
+        mainView.getStatusLabel().setText("Exporting " + progress.completed() + "/" + progress.total());
+    }
+
+    private void handleExportComplete(BatchProcessor.BatchResult result, Throwable throwable) {
+        mainView.setProcessingVisible(false);
+        if (throwable != null) {
+            Throwable cause = unwrap(throwable);
+            LOGGER.error("Export failed", cause);
+            showError(userMessage(cause, "The images could not be exported."));
+            return;
+        }
+        int successCount = result.successes().size();
+        int failureCount = result.failures().size();
+        LOGGER.info("Export finished: {} succeeded, {} failed", successCount, failureCount);
+        showInformation("Export complete: " + successCount + " succeeded, " + failureCount + " failed.");
     }
 
     private void schedulePreviewConversion() {
@@ -306,65 +312,79 @@ public class MainViewController {
     }
 
     private void startInitialPreprocessing(List<ImageItem> itemsToProcess) {
-        // Prepare previews and detect color limits for newly imported images in parallel.
         long generation = dataGeneration.get();
         mainView.setProcessingVisible(true);
         mainView.getProgressBar().setProgress(0);
         mainView.getStatusLabel().setText("Preparing previews...");
         mainView.getPreviewPane().setBusy(true);
 
-        batchProcessor.preprocessAsync(itemsToProcess, progress ->
-                Platform.runLater(() -> {
-                    if (generation != dataGeneration.get()) {
-                        return;
-                    }
-                    mainView.getProgressBar().setProgress(
-                            (double) progress.completed() / progress.total());
-                    mainView.getStatusLabel().setText(
-                            "Preparing " + progress.completed() + "/" + progress.total());
-                }), prepared -> Platform.runLater(() -> {
-                    if (generation != dataGeneration.get()) {
-                        return;
-                    }
-                    preprocessingItems.remove(prepared.item());
-                    prepared.item().setVectorizedPath(prepared.svg());
-                    if (!imageItems.isEmpty()
-                            && prepared.item() == imageItems.get(currentIndex)) {
-                        mainView.getConfigPane().setColorLimit(prepared.detectedColors());
-                        refreshPreview();
-                    }
-                })).whenComplete((result, throwable) -> Platform.runLater(() -> {
-            if (generation != dataGeneration.get()) {
-                return;
+        batchProcessor.preprocessAsync(itemsToProcess,
+                progress -> Platform.runLater(() -> updatePreprocessProgress(generation, progress)),
+                prepared -> Platform.runLater(() -> handleItemPreprocessed(generation, prepared))
+        ).whenComplete((result, throwable) -> {
+            Platform.runLater(() -> handlePreprocessComplete(generation, itemsToProcess, result, throwable));
+        });
+    }
+
+    private void updatePreprocessProgress(long generation, BatchProcessor.BatchProgress progress) {
+        if (generation != dataGeneration.get()) {
+            return;
+        }
+        double ratio = (double) progress.completed() / progress.total();
+        mainView.getProgressBar().setProgress(ratio);
+        mainView.getStatusLabel().setText("Preparing " + progress.completed() + "/" + progress.total());
+    }
+
+    private void handleItemPreprocessed(long generation, BatchProcessor.PreprocessedItem prepared) {
+        if (generation != dataGeneration.get()) {
+            return;
+        }
+        preprocessingItems.remove(prepared.item());
+        prepared.item().setVectorizedPath(prepared.svg());
+        if (!imageItems.isEmpty() && prepared.item() == imageItems.get(currentIndex)) {
+            mainView.getConfigPane().setColorLimit(prepared.detectedColors());
+            refreshPreview();
+        }
+    }
+
+    private void handlePreprocessComplete(
+            long generation,
+            List<ImageItem> itemsToProcess,
+            BatchProcessor.PreprocessResult result,
+            Throwable throwable) {
+        if (generation != dataGeneration.get()) {
+            return;
+        }
+        for (ImageItem item : itemsToProcess) {
+            preprocessingItems.remove(item);
+        }
+        boolean preprocessingStillRunning = !preprocessingItems.isEmpty();
+        mainView.setProcessingVisible(preprocessingStillRunning);
+        mainView.getPreviewPane().setBusy(preprocessingStillRunning);
+        if (throwable != null) {
+            Throwable cause = unwrap(throwable);
+            LOGGER.error("Initial preprocessing failed", cause);
+            showError(userMessage(cause, "The images could not be prepared."));
+            return;
+        }
+        if (!imageItems.isEmpty()) {
+            refreshPreview();
+            updateColorLimitForCurrent(result);
+        }
+        if (!result.failures().isEmpty()) {
+            LOGGER.error("Some initial previews failed: {}", result.failures().size());
+            showError(result.failures().size() + " image(s) could not be prepared.");
+        }
+    }
+
+    private void updateColorLimitForCurrent(BatchProcessor.PreprocessResult result) {
+        ImageItem currentImageItem = imageItems.get(currentIndex);
+        for (BatchProcessor.PreprocessedItem successItem : result.successes()) {
+            if (successItem.item() == currentImageItem) {
+                mainView.getConfigPane().setColorLimit(successItem.detectedColors());
+                break;
             }
-            for (ImageItem item : itemsToProcess) {
-                preprocessingItems.remove(item);
-            }
-            boolean preprocessingStillRunning = !preprocessingItems.isEmpty();
-            mainView.setProcessingVisible(preprocessingStillRunning);
-            mainView.getPreviewPane().setBusy(preprocessingStillRunning);
-            if (throwable != null) {
-                LOGGER.error("Initial preprocessing failed", unwrap(throwable));
-                showError(userMessage(unwrap(throwable),
-                        "The images could not be prepared."));
-                return;
-            }
-            if (!imageItems.isEmpty()) {
-                refreshPreview();
-                BatchProcessor.PreprocessedItem current = result.successes().stream()
-                        .filter(item -> item.item() == imageItems.get(currentIndex))
-                        .findFirst()
-                        .orElse(null);
-                if (current != null) {
-                    mainView.getConfigPane().setColorLimit(current.detectedColors());
-                }
-            }
-            if (!result.failures().isEmpty()) {
-                LOGGER.error("Some initial previews failed: {}", result.failures().size());
-                showError(result.failures().size()
-                        + " image(s) could not be prepared.");
-            }
-        }));
+        }
     }
 
     private void analyzeCurrentImage() {
@@ -372,25 +392,33 @@ public class MainViewController {
             return;
         }
         ImageItem item = imageItems.get(currentIndex);
-        CompletableFuture.supplyAsync(() -> {
-            try {
-                BufferedImage image = ImageIO.read(item.getFile());
-                if (image == null) {
-                    throw new IOException("Input image is corrupted.");
-                }
-                return ColorAnalyzer.detectColorCount(image);
-            } catch (IOException exception) {
-                throw new CompletionException(exception);
+        CompletableFuture.supplyAsync(() -> readAndCountColors(item))
+                .thenAccept(colorCount -> {
+                    Platform.runLater(() -> applyDetectedColorCount(item, colorCount));
+                })
+                .exceptionally(throwable -> {
+                    LOGGER.error("Unable to analyze image colors", unwrap(throwable));
+                    return null;
+                });
+    }
+
+    private int readAndCountColors(ImageItem item) {
+        try {
+            BufferedImage image = ImageIO.read(item.getFile());
+            if (image == null) {
+                throw new IOException("Input image is corrupted: " + item.getFile().getName());
             }
-        }).thenAccept(colorCount -> Platform.runLater(() -> {
-            LOGGER.debug("Color count detected for {}: {}", item.getFile().getName(), colorCount);
-            if (item == imageItems.get(currentIndex)) {
-                mainView.getConfigPane().setColorLimit(colorCount);
-            }
-        })).exceptionally(throwable -> {
-            LOGGER.error("Unable to analyze image colors", unwrap(throwable));
-            return null;
-        });
+            return ColorAnalyzer.detectColorCount(image);
+        } catch (IOException exception) {
+            throw new CompletionException(exception);
+        }
+    }
+
+    private void applyDetectedColorCount(ImageItem item, int colorCount) {
+        LOGGER.debug("Color count detected for {}: {}", item.getFile().getName(), colorCount);
+        if (item == imageItems.get(currentIndex)) {
+            mainView.getConfigPane().setColorLimit(colorCount);
+        }
     }
 
     private void prepareInitialSettings(List<ImageItem> items) {
@@ -415,7 +443,16 @@ public class MainViewController {
         mainView.getConfigPane().setNavigationDisabled(imageItems.size() <= 1);
     }
 
-    private static Thread daemonThread(Runnable runnable) {
+    private boolean isAlreadyLoaded(File targetFile) {
+        for (ImageItem item : imageItems) {
+            if (sameFile(item.getFile(), targetFile)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static Thread createDaemonThread(Runnable runnable) {
         Thread thread = new Thread(runnable, "vectorizer-preview");
         thread.setDaemon(true);
         return thread;
@@ -429,15 +466,17 @@ public class MainViewController {
         if (files.size() == 1 && FileValidator.isZip(files.get(0))) {
             return ZipHandler.extractImages(files.get(0));
         }
-        if (files.stream().anyMatch(FileValidator::isZip)) {
-            throw new UnsupportedFileFormatException("Drop either images or one ZIP file, not both.");
+        for (File file : files) {
+            if (FileValidator.isZip(file)) {
+                throw new UnsupportedFileFormatException("Drop either images or one ZIP file, not both.");
+            }
+            if (!FileValidator.isSupportedImage(file)) {
+                throw new UnsupportedFileFormatException("Only JPG and PNG files are supported.");
+            }
         }
-        if (files.stream().anyMatch(file -> !FileValidator.isSupportedImage(file))) {
-            throw new UnsupportedFileFormatException("Only JPG and PNG files are supported.");
-        }
-        return files.stream()
-                .sorted(Comparator.comparing(File::getName, String.CASE_INSENSITIVE_ORDER))
-                .toList();
+        List<File> sortedFiles = new ArrayList<>(files);
+        sortedFiles.sort((file1, file2) -> file1.getName().compareToIgnoreCase(file2.getName()));
+        return sortedFiles;
     }
 
     private static ConversionSettings copyOf(ConversionSettings source) {

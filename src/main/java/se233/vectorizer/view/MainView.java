@@ -39,9 +39,9 @@ public class MainView extends BorderPane {
             }
         });
 
-        Button zoomIn = createZoomButton("＋", "Zoom In", previewPane::zoomIn);
-        Button zoomOut = createZoomButton("－", "Zoom Out", previewPane::zoomOut);
-        Button zoomToFit = createZoomButton("⌂", "Zoom to Fit", previewPane::zoomToFit);
+        Button zoomIn = createZoomButton("＋", "Zoom In", event -> previewPane.zoomIn());
+        Button zoomOut = createZoomButton("－", "Zoom Out", event -> previewPane.zoomOut());
+        Button zoomToFit = createZoomButton("⌂", "Zoom to Fit", event -> previewPane.zoomToFit());
 
         ToolBar zoomToolbar = new ToolBar(zoomIn, zoomOut, zoomToFit);
         zoomToolbar.getStyleClass().add("zoom-toolbar");
@@ -94,11 +94,11 @@ public class MainView extends BorderPane {
         onFilesAccepted = action;
     }
 
-    private Button createZoomButton(String symbol, String label, Runnable action) {
+    private Button createZoomButton(String symbol, String label, javafx.event.EventHandler<javafx.event.ActionEvent> action) {
         // Create reusable buttons so all zoom controls share the same setup.
         Button button = new Button(symbol + "  " + label);
         button.getStyleClass().add("toolbar-button");
-        button.setOnAction(event -> action.run());
+        button.setOnAction(action);
         button.setFocusTraversable(false);
         return button;
     }

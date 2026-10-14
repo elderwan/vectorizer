@@ -50,17 +50,23 @@ public class Launcher extends Application {
      * @param args command-line arguments
      */
     public static void main(String[] args) {
-        // Convert unexpected background errors into a log entry and visible alert.
-        Thread.setDefaultUncaughtExceptionHandler((thread, exception) -> {
-            LOGGER.error("Uncaught exception on thread {}", thread.getName(), exception);
-            javafx.application.Platform.runLater(() ->
-                    new javafx.scene.control.Alert(
-                            javafx.scene.control.Alert.AlertType.ERROR,
-                            exception.getMessage() == null
-                                    ? "An unexpected error occurred."
-                                    : exception.getMessage(),
-                            javafx.scene.control.ButtonType.OK).showAndWait());
-        });
+        Thread.setDefaultUncaughtExceptionHandler((thread, exception) -> handleUncaughtException(thread, exception));
         launch(args);
+    }
+
+    private static void handleUncaughtException(Thread thread, Throwable exception) {
+        LOGGER.error("Uncaught exception on thread {}", thread.getName(), exception);
+        javafx.application.Platform.runLater(() -> {
+            String message = exception.getMessage();
+            if (message == null || message.isBlank()) {
+                message = "An unexpected error occurred.";
+            }
+            javafx.scene.control.Alert alert = new javafx.scene.control.Alert(
+                    javafx.scene.control.Alert.AlertType.ERROR,
+                    message,
+                    javafx.scene.control.ButtonType.OK
+            );
+            alert.showAndWait();
+        });
     }
 }

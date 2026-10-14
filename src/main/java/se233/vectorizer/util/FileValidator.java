@@ -1,7 +1,6 @@
 package se233.vectorizer.util;
 
 import java.io.File;
-import java.util.Arrays;
 import java.util.Locale;
 
 /**
@@ -92,7 +91,12 @@ public final class FileValidator {
      */
     private static boolean hasExtension(String fileName, String... extensions) {
         String normalizedName = fileName.toLowerCase(Locale.ROOT);
-        return Arrays.stream(extensions).anyMatch(normalizedName::endsWith);
+        for (String extension : extensions) {
+            if (normalizedName.endsWith(extension)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
