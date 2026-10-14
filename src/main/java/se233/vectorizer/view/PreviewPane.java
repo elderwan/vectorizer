@@ -57,8 +57,6 @@ public class PreviewPane extends BorderPane {
         setPadding(new Insets(12));
         vectorizedWebView.setContextMenuEnabled(false);
         vectorizedWebView.setPageFill(Color.TRANSPARENT);
-        vectorizedWebView.setPrefSize(800, 600);
-        vectorizedWebView.setMinSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
 
         splitPane = new SplitPane(
                 createPreviewPanel("Original Image", originalScrollPane),
@@ -66,6 +64,7 @@ public class PreviewPane extends BorderPane {
         splitPane.setDividerPositions(0.5);
 
         previewStack.getChildren().addAll(splitPane, progressIndicator);
+        progressIndicator.setProgress(-1); // Indeterminate spinner without percentage
         progressIndicator.setVisible(false);
         progressIndicator.setMaxSize(48, 48);
         setCenter(previewStack);
@@ -77,6 +76,8 @@ public class PreviewPane extends BorderPane {
         setImageSize(originalImageView, original);
         if (original != null && original.getWidth() > 0 && original.getHeight() > 0) {
             vectorizedWebView.setPrefSize(original.getWidth(), original.getHeight());
+            vectorizedWebView.setMinSize(original.getWidth(), original.getHeight());
+            vectorizedWebView.setMaxSize(original.getWidth(), original.getHeight());
         }
         loadSvg(vectorizedSvg);
         zoom.set(1.0);
@@ -137,7 +138,18 @@ public class PreviewPane extends BorderPane {
     private void loadSvg(Path svg) {
         // WebView renders SVG files while showing a fallback for missing results.
         if (svg != null && Files.isRegularFile(svg)) {
-            vectorizedWebView.getEngine().load(svg.toUri().toString());
+            try {
+                String svgContent = Files.readString(svg);
+                String html = "<!DOCTYPE html><html><head><style>"
+                        + "html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; display: flex; align-items: center; justify-content: center; }"
+                        + "svg { width: 100%; height: 100%; object-fit: contain; display: block; }"
+                        + "</style></head><body>"
+                        + svgContent
+                        + "</body></html>";
+                vectorizedWebView.getEngine().loadContent(html, "text/html");
+            } catch (Exception e) {
+                vectorizedWebView.getEngine().load(svg.toUri().toString());
+            }
         } else {
             vectorizedWebView.getEngine().loadContent(
                     "<html><body><p>Vectorized preview unavailable</p></body></html>");
@@ -147,7 +159,7 @@ public class PreviewPane extends BorderPane {
     private void setScale(double requestedScale) {
         zoom.set(clamp(requestedScale, MIN_SCALE, MAX_SCALE));
         resizeImage(originalImageView, zoom.get());
-        vectorizedWebView.setZoom(zoom.get());
+        resizeWebView(vectorizedWebView, zoom.get());
     }
 
     private static double clamp(double value, double minimum, double maximum) {
@@ -188,6 +200,17 @@ public class PreviewPane extends BorderPane {
         if (image != null) {
             imageView.setFitWidth(image.getWidth() * scale);
             imageView.setFitHeight(image.getHeight() * scale);
+        }
+    }
+
+    private void resizeWebView(WebView webView, double scale) {
+        Image image = originalImageView.getImage();
+        if (image != null && image.getWidth() > 0 && image.getHeight() > 0) {
+            double targetWidth = image.getWidth() * scale;
+            double targetHeight = image.getHeight() * scale;
+            webView.setPrefSize(targetWidth, targetHeight);
+            webView.setMinSize(targetWidth, targetHeight);
+            webView.setMaxSize(targetWidth, targetHeight);
         }
     }
 

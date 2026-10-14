@@ -50,8 +50,15 @@ public class Launcher extends Application {
      * @param args command-line arguments
      */
     public static void main(String[] args) {
+        initGraphicsEnvironment();
         Thread.setDefaultUncaughtExceptionHandler((thread, exception) -> handleUncaughtException(thread, exception));
         launch(args);
+    }
+
+    private static void initGraphicsEnvironment() {
+        if (System.getProperty("prism.maxvram") == null) {
+            System.setProperty("prism.maxvram", "2G");
+        }
     }
 
     private static void handleUncaughtException(Thread thread, Throwable exception) {

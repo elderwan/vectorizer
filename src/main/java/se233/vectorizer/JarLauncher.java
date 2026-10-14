@@ -13,6 +13,9 @@ public final class JarLauncher {
      * @param args command-line arguments
      */
     public static void main(String[] args) {
+        if (System.getProperty("prism.maxvram") == null) {
+            System.setProperty("prism.maxvram", "2G");
+        }
         // Delegate to the normal JavaFX launcher.
         Launcher.main(args);
     }

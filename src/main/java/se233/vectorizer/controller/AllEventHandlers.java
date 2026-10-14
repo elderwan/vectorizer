@@ -31,7 +31,10 @@ public final class AllEventHandlers {
      * @param view view containing the navigation controls
      */
     private static void installNavigationHandlers(MainViewController controller, MainView view) {
+        // [Back Button Action] -> Navigates to previous image
         view.getConfigPane().setOnBack(() -> controller.showPrevious());
+
+        // [Next Button Action] -> Navigates to next image
         view.getConfigPane().setOnNext(() -> controller.showNext());
     }
 
@@ -42,8 +45,13 @@ public final class AllEventHandlers {
      * @param view view containing the action controls
      */
     private static void installActionHandlers(MainViewController controller, MainView view) {
+        // [Export All Button Action] -> Launches batch SVG export to selected folder
         view.getConfigPane().setOnExportAll(() -> controller.exportAll());
+
+        // [Reset Button Action] -> Clears loaded images and returns to initial drop zone
         view.getConfigPane().setOnReset(() -> controller.resetAll());
+
+        // [Settings Changed Action] -> Re-runs vectorization when parameters are adjusted
         view.getConfigPane().setOnSettingsChanged(settings -> controller.applySettings(settings));
     }
 }

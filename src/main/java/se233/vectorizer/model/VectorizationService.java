@@ -15,8 +15,11 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 
@@ -164,11 +167,11 @@ public class VectorizationService {
         QuantizedImage quantized = quantize(image, colorLimit, preservePalette);
         List<Path> layerSvgs = new ArrayList<>();
         List<Integer> layerColors = new ArrayList<>();
-        int backgroundLayer = settings.isRemoveBackground()
-                ? detectBackgroundLayer(quantized) : -1;
+        Set<Integer> backgroundLayers = settings.isRemoveBackground()
+                ? detectBackgroundLayers(quantized) : Set.of();
 
         for (int layer = 0; layer < quantized.palette().size(); layer++) {
-            if (quantized.pixelCount(layer) == 0 || layer == backgroundLayer) {
+            if (quantized.pixelCount(layer) == 0 || backgroundLayers.contains(layer)) {
                 continue;
             }
             Path input = directory.resolve("layer-" + layer + ".ppm");
@@ -385,19 +388,200 @@ public class VectorizationService {
         Files.writeString(output, svg, StandardCharsets.UTF_8);
     }
 
-    private static int detectBackgroundLayer(QuantizedImage image) {
-        if (image.palette().size() == 1) {
-            return -1;
+    /**
+     * Identifies background color layers to exclude during vectorization.
+     * Supports solid backgrounds, multi-tone gradients, and perimeter boundaries.
+     *
+     * @param image the quantized image with color assignments and palette
+     * @return a set of layer indices representing background colors
+     */
+    private static Set<Integer> detectBackgroundLayers(QuantizedImage image) {
+        int colorCount = image.palette().size();
+        if (colorCount <= 1) {
+            return Collections.emptySet();
         }
-        int topLeft = image.assignments()[0];
-        int topRight = image.assignments()[image.width() - 1];
-        int bottomLeft = image.assignments()[(image.height() - 1) * image.width()];
-        int bottomRight = image.assignments()[image.assignments().length - 1];
-        if (topLeft != topRight || topLeft != bottomLeft || topLeft != bottomRight) {
-            return -1;
+
+        int width = image.width();
+        int height = image.height();
+        int[] assignments = image.assignments();
+        int totalPixels = assignments.length;
+
+        // Step 1: Count edge pixels and corner pixels for each color layer
+        int[] edgeCounts = new int[colorCount];
+        int[] cornerCounts = new int[colorCount];
+        int totalEdgePixels = countEdgeAndCornerPixels(
+                assignments, width, height, edgeCounts, cornerCounts);
+
+        // Step 2: Detect initial background seed layers (dominant perimeter or corners)
+        Set<Integer> backgroundLayers = findInitialBackgroundSeeds(
+                edgeCounts, cornerCounts, totalEdgePixels, image.pixelCounts(), totalPixels, colorCount);
+
+        // Step 3: Expand detection to multi-tone / gradient background layers
+        expandGradientBackgroundLayers(
+                backgroundLayers, edgeCounts, totalEdgePixels, image.pixelCounts(), totalPixels, image.palette());
+
+        // Step 4: Safety guarantee: never remove all layers from an image
+        if (backgroundLayers.size() >= colorCount) {
+            int leastEdgeLayer = 0;
+            int minEdge = Integer.MAX_VALUE;
+            for (int layer = 0; layer < colorCount; layer++) {
+                if (edgeCounts[layer] < minEdge) {
+                    minEdge = edgeCounts[layer];
+                    leastEdgeLayer = layer;
+                }
+            }
+            backgroundLayers.remove(leastEdgeLayer);
         }
-        return image.pixelCount(topLeft) >= image.assignments().length / 20
-                ? topLeft : -1;
+
+        return backgroundLayers;
+    }
+
+    /**
+     * Counts how many times each color layer appears on the outer borders and 4 corners.
+     */
+    private static int countEdgeAndCornerPixels(
+            int[] assignments,
+            int width,
+            int height,
+            int[] edgeCounts,
+            int[] cornerCounts) {
+        int totalEdgePixels = 0;
+
+        // Record the 4 corners of the image
+        int topLeft = assignments[0];
+        int topRight = assignments[width - 1];
+        int bottomLeft = assignments[(height - 1) * width];
+        int bottomRight = assignments[(height - 1) * width + width - 1];
+
+        cornerCounts[topLeft]++;
+        cornerCounts[topRight]++;
+        cornerCounts[bottomLeft]++;
+        cornerCounts[bottomRight]++;
+
+        // Sample top and bottom rows
+        for (int x = 0; x < width; x++) {
+            edgeCounts[assignments[x]]++;
+            edgeCounts[assignments[(height - 1) * width + x]]++;
+            totalEdgePixels += 2;
+        }
+
+        // Sample left and right columns (excluding corners already sampled)
+        for (int y = 1; y < height - 1; y++) {
+            edgeCounts[assignments[y * width]]++;
+            edgeCounts[assignments[y * width + (width - 1)]]++;
+            totalEdgePixels += 2;
+        }
+
+        return totalEdgePixels;
+    }
+
+    /**
+     * Finds seed background layers based on border dominance and corner occupancy.
+     */
+    private static Set<Integer> findInitialBackgroundSeeds(
+            int[] edgeCounts,
+            int[] cornerCounts,
+            int totalEdgePixels,
+            int[] pixelCounts,
+            int totalPixels,
+            int colorCount) {
+        Set<Integer> seeds = new HashSet<>();
+
+        // 1. Find the layer with the highest presence along the image perimeter
+        int dominantEdgeLayer = -1;
+        int maxEdgeCount = 0;
+        for (int layer = 0; layer < colorCount; layer++) {
+            if (edgeCounts[layer] > maxEdgeCount) {
+                maxEdgeCount = edgeCounts[layer];
+                dominantEdgeLayer = layer;
+            }
+        }
+
+        double dominantEdgeRatio = (double) maxEdgeCount / totalEdgePixels;
+        if (dominantEdgeLayer != -1 && dominantEdgeRatio >= 0.20 && pixelCounts[dominantEdgeLayer] >= totalPixels * 0.03) {
+            seeds.add(dominantEdgeLayer);
+        }
+
+        // 2. Identify secondary layers that occupy multiple corners (only if primary does not overwhelmingly dominate >= 60%)
+        if (dominantEdgeRatio < 0.60) {
+            for (int layer = 0; layer < colorCount; layer++) {
+                if (layer == dominantEdgeLayer) {
+                    continue;
+                }
+                double edgeRatio = (double) edgeCounts[layer] / totalEdgePixels;
+                double totalRatio = (double) pixelCounts[layer] / totalPixels;
+
+                boolean multipleCorners = cornerCounts[layer] >= 2 && edgeRatio >= 0.15;
+                if (multipleCorners && totalRatio >= 0.02) {
+                    seeds.add(layer);
+                }
+            }
+        }
+
+        return seeds;
+    }
+
+    /**
+     * Expands background layers to include multi-tone / gradient transitions
+     * that share color similarity and border presence with initial seed layers.
+     */
+    private static void expandGradientBackgroundLayers(
+            Set<Integer> backgroundLayers,
+            int[] edgeCounts,
+            int totalEdgePixels,
+            int[] pixelCounts,
+            int totalPixels,
+            List<Integer> palette) {
+        int colorCount = palette.size();
+        boolean expanded = true;
+
+        while (expanded) {
+            expanded = false;
+            for (int layer = 0; layer < colorCount; layer++) {
+                if (backgroundLayers.contains(layer)) {
+                    continue;
+                }
+
+                double edgeRatio = (double) edgeCounts[layer] / totalEdgePixels;
+                double totalRatio = (double) pixelCounts[layer] / totalPixels;
+
+                // Candidate gradient layer must touch the outer perimeter
+                if (edgeRatio < 0.04 || totalRatio < 0.01) {
+                    continue;
+                }
+
+                for (int bgLayer : new ArrayList<>(backgroundLayers)) {
+                    double distance = calculateColorDistance(palette.get(layer), palette.get(bgLayer));
+                    double maxAllowedDistance = (edgeRatio >= 0.12) ? 125.0 : 95.0;
+
+                    if (distance <= maxAllowedDistance) {
+                        int currentBackgroundPixels = 0;
+                        for (int bl : backgroundLayers) {
+                            currentBackgroundPixels += pixelCounts[bl];
+                        }
+                        // Safety threshold: keep at least 12% of the image as foreground subject
+                        if ((currentBackgroundPixels + pixelCounts[layer]) <= totalPixels * 0.88) {
+                            backgroundLayers.add(layer);
+                            expanded = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Calculates Euclidean distance between two RGB colors.
+     */
+    private static double calculateColorDistance(int firstColor, int secondColor) {
+        int redDifference = ((firstColor >> 16) & 0xFF) - ((secondColor >> 16) & 0xFF);
+        int greenDifference = ((firstColor >> 8) & 0xFF) - ((secondColor >> 8) & 0xFF);
+        int blueDifference = (firstColor & 0xFF) - (secondColor & 0xFF);
+        return Math.sqrt(
+                redDifference * redDifference +
+                greenDifference * greenDifference +
+                blueDifference * blueDifference);
     }
 
     private static int turdSize(ConversionSettings settings) {

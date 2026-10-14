@@ -39,8 +39,21 @@ public class MainView extends BorderPane {
             }
         });
 
+        // =========================================================================
+        // TOP TOOLBAR ZOOM BUTTONS
+        // =========================================================================
+
+        // [BUTTON: Zoom In]
+        // Increases the magnification scale by factor of 1.2x for both the original
+        // image and the vectorized SVG preview synchronously.
         Button zoomIn = createZoomButton("＋", "Zoom In", event -> previewPane.zoomIn());
+
+        // [BUTTON: Zoom Out]
+        // Decreases the magnification scale by factor of 0.8x for both previews synchronously.
         Button zoomOut = createZoomButton("－", "Zoom Out", event -> previewPane.zoomOut());
+
+        // [BUTTON: Zoom to Fit]
+        // Automatically computes the scale required to fit the entire image inside the viewport.
         Button zoomToFit = createZoomButton("⌂", "Zoom to Fit", event -> previewPane.zoomToFit());
 
         ToolBar zoomToolbar = new ToolBar(zoomIn, zoomOut, zoomToFit);

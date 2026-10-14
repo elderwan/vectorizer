@@ -74,8 +74,14 @@ public class ConfigPane extends VBox {
             colorsSpinner.setDisable(!selected);
         });
 
+        // [BUTTON: Export All]
+        // Initiates asynchronous batch vectorization for all loaded images and exports them to a user-chosen directory.
         exportAllButton.getStyleClass().add("primary-button");
+
+        // [BUTTON: Reset]
+        // Clears all currently loaded images, cancels ongoing preview tasks, and returns to the initial drop zone.
         resetButton.getStyleClass().add("secondary-button");
+
         detailComboBox.getStyleClass().add("settings-control");
         colorsSpinner.getStyleClass().add("settings-control");
         removeBackgroundCheckBox.getStyleClass().add("settings-check");
@@ -140,7 +146,8 @@ public class ConfigPane extends VBox {
     }
 
     /**
-     * Connects the Export All button to a controller action.
+     * Connects the [Export All] button to the controller action.
+     * When clicked, opens a directory chooser and exports all images as SVG files.
      *
      * @param action action invoked when Export All is clicked
      */
@@ -149,7 +156,8 @@ public class ConfigPane extends VBox {
     }
 
     /**
-     * Connects the Reset button to a controller action.
+     * Connects the [Reset] button to the controller action.
+     * When clicked, cancels all tasks, empties loaded images, and shows the drop zone.
      *
      * @param action action invoked when Reset is clicked
      */
@@ -158,7 +166,8 @@ public class ConfigPane extends VBox {
     }
 
     /**
-     * Connects the Back button to a controller action.
+     * Connects the [Back] navigation button to the controller action.
+     * When clicked, navigates to the previous image in the loaded images list.
      *
      * @param action action invoked when Back is clicked
      */
@@ -167,7 +176,8 @@ public class ConfigPane extends VBox {
     }
 
     /**
-     * Connects the Next button to a controller action.
+     * Connects the [Next] navigation button to the controller action.
+     * When clicked, navigates to the next image in the loaded images list.
      *
      * @param action action invoked when Next is clicked
      */

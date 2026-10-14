@@ -56,6 +56,8 @@ public class ImageItem {
         return vectorizedPath;
     }
 
+    private final java.util.Map<ConversionSettings, Path> cache = new java.util.HashMap<>();
+
     /**
      * Stores the generated SVG path.
      *
@@ -64,6 +66,21 @@ public class ImageItem {
     public void setVectorizedPath(Path vectorizedPath) {
         // Store the generated SVG so the preview can display it later.
         this.vectorizedPath = vectorizedPath;
+        if (vectorizedPath != null) {
+            ConversionSettings snapshot = new ConversionSettings();
+            snapshot.setDetailLevel(settings.getDetailLevel());
+            snapshot.setColorMode(settings.getColorMode());
+            snapshot.setCustomColors(settings.getCustomColors());
+            snapshot.setRemoveBackground(settings.isRemoveBackground());
+            cache.put(snapshot, vectorizedPath);
+        }
+    }
+
+    /**
+     * Checks if a cached SVG exists for the specified settings.
+     */
+    public Path getCachedSvg(ConversionSettings currentSettings) {
+        return cache.get(currentSettings);
     }
 
     /**

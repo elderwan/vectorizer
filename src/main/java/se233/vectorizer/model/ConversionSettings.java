@@ -215,4 +215,20 @@ public class ConversionSettings {
             throw new IllegalArgumentException(message);
         }
     }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        ConversionSettings that = (ConversionSettings) o;
+        return customColors == that.customColors
+                && removeBackground == that.removeBackground
+                && detailLevel == that.detailLevel
+                && colorMode == that.colorMode;
+    }
+
+    @Override
+    public int hashCode() {
+        return java.util.Objects.hash(detailLevel, colorMode, customColors, removeBackground);
+    }
 }

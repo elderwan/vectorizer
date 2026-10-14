@@ -23,6 +23,7 @@ import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -130,10 +131,12 @@ public class MainViewController {
     }
 
     /**
-     * Cancels current work and clears all imported images.
+     * Handles the [Reset] button action.
+     * Cancels all pending conversion tasks, increments generation counters to invalidate
+     * outdated worker callbacks, clears the imported image list, and resets the UI back
+     * to the initial file drop zone screen.
      */
     public void resetAll() {
-        // Cancel pending work and return the UI to the initial drop screen.
         LOGGER.info("Resetting all loaded images");
         previewGeneration.incrementAndGet();
         dataGeneration.incrementAndGet();
@@ -153,31 +156,48 @@ public class MainViewController {
     }
 
     /**
-     * Selects and displays the previous imported image.
+     * Handles the [Back] button action.
+     * Selects and displays the previous imported image in the list.
+     * Uses the cached SVG if the same settings were already converted.
      */
     public void showPrevious() {
         if (currentIndex > 0) {
             currentIndex--;
             refreshPreview();
             analyzeCurrentImage();
-            schedulePreviewConversion();
+            checkAndSchedulePreview();
         }
     }
 
     /**
-     * Selects and displays the next imported image.
+     * Handles the [Next] button action.
+     * Selects and displays the next imported image in the list.
+     * Uses the cached SVG if the same settings were already converted.
      */
     public void showNext() {
         if (currentIndex < imageItems.size() - 1) {
             currentIndex++;
             refreshPreview();
             analyzeCurrentImage();
+            checkAndSchedulePreview();
+        }
+    }
+
+    private void checkAndSchedulePreview() {
+        ImageItem item = imageItems.get(currentIndex);
+        Path cached = item.getCachedSvg(item.getSettings());
+        if (cached != null && Files.isRegularFile(cached)) {
+            item.setVectorizedPath(cached);
+            mainView.getPreviewPane().setBusy(false);
+            refreshPreview();
+        } else {
             schedulePreviewConversion();
         }
     }
 
     /**
-     * Applies settings to the current image and schedules a new preview.
+     * Handles settings modification (Detail, Color Mode, Colors Spinner, Background CheckBox).
+     * Applies the newly selected settings to the current image and schedules a new debounced preview conversion.
      *
      * @param settings settings selected in the configuration pane
      */
@@ -198,7 +218,9 @@ public class MainViewController {
     }
 
     /**
-     * Exports all imported images to a user-selected directory.
+     * Handles the [Export All] button action.
+     * Displays a native directory chooser dialog, then starts an asynchronous
+     * batch vectorization pipeline using BatchProcessor to export all loaded images.
      */
     public void exportAll() {
         // Export every loaded image asynchronously and update progress on the JavaFX thread.
@@ -276,13 +298,19 @@ public class MainViewController {
             return;
         }
         ConversionSettings settings = copyOf(item.getSettings());
+        Path cached = item.getCachedSvg(settings);
+        if (cached != null && Files.isRegularFile(cached)) {
+            item.setVectorizedPath(cached);
+            mainView.getPreviewPane().setBusy(false);
+            refreshPreview();
+            return;
+        }
+
         Task<Void> task = new Task<>() {
             @Override
             protected Void call() {
-                updateProgress(0, 1);
                 Path svg = vectorizationService.convertAsync(item, settings).join();
                 item.setVectorizedPath(svg);
-                updateProgress(1, 1);
                 return null;
             }
         };
@@ -303,11 +331,6 @@ public class MainViewController {
             }
         });
         task.setOnCancelled(event -> mainView.getPreviewPane().setBusy(false));
-        if (mainView.getPreviewPane().getProgressIndicator().progressProperty().isBound()) {
-            mainView.getPreviewPane().getProgressIndicator().progressProperty().unbind();
-        }
-        mainView.getPreviewPane().getProgressIndicator().progressProperty()
-                .bind(task.progressProperty());
         previewExecutor.submit(task);
     }
 
